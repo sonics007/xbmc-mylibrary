@@ -91,7 +91,7 @@ public class Subfolder implements Constants
         boolean canAddAnotherEpisode = 
                     getMaxVideos() <0//max not configured
                     || getNumberOfVideos() < getMaxVideos();
-       
+                       
         return canAddAnotherEpisode;
     }
     public boolean canAddAnotherSeries(String seriesName)

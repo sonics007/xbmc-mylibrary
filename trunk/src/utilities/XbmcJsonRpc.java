@@ -10,18 +10,18 @@ import org.json.*;
 public class XbmcJsonRpc implements Runnable, Constants
 {
            
-    boolean userCurl=false, useRawTCP=true;
+    boolean useHTTP=false, useRawTCP=true;
     int port = 9090;
-    public void useCurl()//curl.exe -i -X POST -d "{\"jsonrpc\": \"2.0\", \"method\": \"JSONRPC.Version\", \"id\": 1}" http://localhost:8080/jsonrpc
+    public void useHTTP()//curl.exe -i -X POST -d "{\"jsonrpc\": \"2.0\", \"method\": \"JSONRPC.Version\", \"id\": 1}" http://localhost:8080/jsonrpc
     {
-        userCurl = true;
+        useHTTP = true;
         useRawTCP = false;
         port = Config.XBMC_SERVER_WEB_PORT; 
     }
     public void useRawTCP()//default
     {
         useRawTCP = true;
-        userCurl = false;
+        useHTTP = false;
         port = 9090;
     }
 
@@ -34,6 +34,7 @@ public class XbmcJsonRpc implements Runnable, Constants
      * Gets all TV Episodes, Music Videos, and Movies
      * includeExtras - if true, things like seasons, movie sets, etc will be included. If false, only videos will be included
      */
+    boolean PRINT_JSON = false;
     public Map<String,XBMCFile> getLibraryVideos(boolean includeExtras)
     {
         Config.log(INFO, "Querying JSON-RPC interface for all videos in library.");
@@ -45,7 +46,8 @@ public class XbmcJsonRpc implements Runnable, Constants
         //get movies
         try
         {
-            JSONObject movies = callMethod("VideoLibrary.GetMovies", 1, params);            
+            params.put("properties", new String[]{"file","fanart","thumbnail"});
+            JSONObject movies = callMethod("VideoLibrary.GetMovies", 1, params);//this also returns movies that exist inside of a set            
             if(movies != null && movies.has("result"))
             {
                 JSONObject result = movies.getJSONObject("result");
@@ -56,59 +58,68 @@ public class XbmcJsonRpc implements Runnable, Constants
                     {
                         JSONObject nextMovie = moviesArray.getJSONObject(i);
                         String fileLocation = nextMovie.getString("file");
-                        
-                        //check if its a movie set
-                        boolean isMovieSet = tools.valid(fileLocation) && fileLocation.toLowerCase().startsWith("videodb://");                       
-                        if(isMovieSet)//get all files in the movie set
-                        {
-                            String movieSetName =  nextMovie.getString("label");
-                            Config.log(DEBUG, "This appears to be a movie set named \""+movieSetName+"\", getting all videos inside it at: \""+fileLocation+"\"");
-                            params = new HashMap<String,Object>();
-                            params.put("directory",fileLocation);
-                            JSONObject json = callMethod("Files.GetDirectory", 1, params);
-                            if(json.has("result") && json.getJSONObject("result").has("files"))
-                            {
-                                JSONArray files = json.getJSONObject("result").getJSONArray("files");
-                                Config.log(DEBUG, "Found " + files.length() +" movies in movie set named \"" +movieSetName+"\"");
-                                for(int f=0;f<files.length();f++)
-                                {
-                                    JSONObject movieInMovieSet = files.getJSONObject(f);
-                                    String loc = movieInMovieSet.getString("file");
-                                    fileList.add(loc);
-                                    boolean replaced = allVideoes.put( loc.toLowerCase(), getXBMCFile(FILE,movieInMovieSet)) != null;
-                                    if(replaced)Config.log(DEBUG, "Found duplicate file in video library: "+  loc);
-                                    else movieCount++;//only count unique videos
-                                }
-                            }
-                        }
-
-                         //add if its not a movie set, or if it is an include extras is enabled
-                        if(!isMovieSet || (isMovieSet && includeExtras))
-                        {
-                            fileList.add(fileLocation);
-                            boolean replaced = allVideoes.put(fileLocation.toLowerCase(), getXBMCFile(isMovieSet ? DIRECTORY : FILE,nextMovie)) != null;
-                            if(replaced)Config.log(DEBUG, "Found duplicate file in video library: "+ fileLocation);
-                            else//only count unique videos
-                            {
-                                if(isMovieSet) movieSetCount++;
-                                else movieCount++;
-                            }
-                        }
+                                                                                                 
+                        fileList.add(fileLocation);
+                        boolean replaced = allVideoes.put(fileLocation.toLowerCase(), getXBMCFile(FILE,nextMovie)) != null;
+                        if(replaced)Config.log(DEBUG, "Found duplicate file in video library: "+ fileLocation);
+                        else//only count unique videos
+                        {                        
+                            movieCount++;
+                        }                        
                     }
                 }
             }
+            
+            if(includeExtras)
+            {
+                Config.log(INFO, "Searching for movie sets");
+                //check for movie sets (considered directories for our purposes
+                params.clear();
+                params.put("properties", new String[]{"title","fanart","thumbnail"});                
+                JSONObject movieSets = callMethod("VideoLibrary.GetMovieSets", 1, params);                        
+
+                if(movieSets != null && movieSets.has("result"))
+                {
+                    JSONObject result = movieSets.getJSONObject("result");
+                    if(result != null && result.has("sets"))
+                    {
+                        JSONArray movieSetArray = result.getJSONArray("sets");
+                        for(int i=0;i<movieSetArray.length();i++)
+                        {
+
+                            JSONObject nextMovieSet = movieSetArray.getJSONObject(i);
+                            Config.log(DEBUG, "Found movieset: "+ nextMovieSet.getString("title") +". setid="+nextMovieSet.getString("setid"));
+                            String fileLocation = "movieset://"+nextMovieSet.getString("setid");//my custom location (not xmbc protocol)                                                                                                 
+
+                            boolean replaced = allVideoes.put(fileLocation.toLowerCase(), getXBMCFile(DIRECTORY,nextMovieSet)) != null;
+                            if(replaced)Config.log(DEBUG, "Found duplicate movie set in video library: "+ fileLocation);
+                            else//only count unique movie sets
+                            {                        
+                                movieSetCount++;
+                            }
+
+                        }
+                    }
+                }                                   
+            
+            }
+
             if(movieCount == 0)
                 Config.log(WARNING, "No movies were found in XBMC's database....");
+            else Config.log(DEBUG, "Found "+ movieCount +" movies in XBMC's database");
         }
         catch(Exception x)
         {
             Config.log(WARNING, "Failed to get list of Movies in XBMC's library using JSON-RPC interface: "+ x,x);
         }
 
-        //get episodes
+        //get TV Shows and seasons/episodes
         try
         {
-            JSONObject series = callMethod("VideoLibrary.GetTVShows", 1, null);
+            
+            params.clear();
+            params.put("properties", new String[]{"file", "fanart", "thumbnail"});            
+            JSONObject series = callMethod("VideoLibrary.GetTVShows", 1, params);
             //Config.log(INFO,series.toString(4));
             if(series != null && series.has("result"))
             {
@@ -120,7 +131,7 @@ public class XbmcJsonRpc implements Runnable, Constants
                     {
                         JSONObject nextTVShow = tvshows.getJSONObject(t);
                         Object tvshowid = nextTVShow.get("tvshowid");
-                        //if including extras, add the show
+                        //if including extras, add the show, otherwise we are just worried about the episode/file
                         if(includeExtras)
                         {
                             //Add the TV Show
@@ -130,9 +141,11 @@ public class XbmcJsonRpc implements Runnable, Constants
                             if(replaced)Config.log(DEBUG, "Found duplicate tv show in video library: \""+ tvshowid+": "+label+"\"");
                             else tvShowCount++;
 
-                            //Add the Seasons
-                            params = new HashMap<String,Object>();
+                            //Add the Seasons                            
+                            
+                            params.clear();
                             params.put("tvshowid", tvshowid);
+                            params.put("properties", new String[]{"fanart","thumbnail","showtitle"});
                             JSONObject tvShowSeasons = callMethod("VideoLibrary.GetSeasons", 1, params);                            
                             if(tvShowSeasons != null && tvShowSeasons.has("result"))
                             {
@@ -154,8 +167,9 @@ public class XbmcJsonRpc implements Runnable, Constants
                         }//end including extras (Tv shows/seasons)
 
                         //add the episodes
-                        params = new HashMap<String,Object>();
+                        params.clear();                        
                         params.put("tvshowid", tvshowid);//get all seasons by not specifying season param
+                        params.put("properties", new String[] {"file","thumbnail","fanart"});
                         JSONObject episodes = callMethod("VideoLibrary.getEpisodes", 1, params);
                         //Config.log(INFO,episodes.toString(4));
                         if(episodes.has("result") && episodes.getJSONObject("result").has("episodes"))
@@ -171,7 +185,7 @@ public class XbmcJsonRpc implements Runnable, Constants
                                 else episodeCount++;
                             }
                         }
-                        else Config.log(INFO,"No episodes found for TV Show: "+ nextTVShow);
+                        else Config.log(INFO,"No episodes found for TV Show: "+ nextTVShow.getString("label") +". ("+nextTVShow+")");
                     }
                 }
                 else Config.log(INFO, "No TV Shows found in XBMC's library for this series: "+ series);
@@ -188,11 +202,13 @@ public class XbmcJsonRpc implements Runnable, Constants
         // get music videos
         try
         {
-             JSONObject musicVideos = callMethod("VideoLibrary.GetMusicVideos", 1, null);
+             params.clear();             
+             params.put("properties", new String[]{"file","fanart","thumbnail","title"});
+             JSONObject musicVideos = callMethod("VideoLibrary.GetMusicVideos", 1, params);
              JSONObject result = null;
              try{result =  musicVideos.getJSONObject("result");}catch(Exception x){result = null;};//see if music vidoes exists inthe library
              if(musicVideos != null && result != null && result.has("musicvideos"))
-             {
+             {                 
                  JSONArray musicVidesArray = musicVideos.getJSONObject("result").getJSONArray("musicvideos");
                  for(int m=0;m<musicVidesArray.length();m++)
                  {
@@ -237,10 +253,12 @@ public class XbmcJsonRpc implements Runnable, Constants
         if(includeExtras)
         try
         {
-            params =new HashMap<String,Object>();
-            params.put("genreid", -1);//-1 for all artists
+            
+            params =new HashMap<String,Object>();            
+            params.put("albumartistsonly", false);
+            params.put("properties", new String[]{"fanart","thumbnail"});
             JSONObject allArtists = callMethod("AudioLibrary.GetArtists", 1, params);            
-            if(allArtists.has("result"))
+            if(allArtists.has("result") && !allArtists.isNull("result"))
             {
                 JSONArray artists = allArtists.getJSONObject("result").getJSONArray("artists");
                 for(int a=0;a<artists.length();a++)
@@ -253,6 +271,7 @@ public class XbmcJsonRpc implements Runnable, Constants
                     else artistCount++;
                 }
             }
+            else Config.log(INFO, "No artists were found in XBMC's database.");
         }
         catch(Exception x)
         {
@@ -262,12 +281,11 @@ public class XbmcJsonRpc implements Runnable, Constants
         //get Albums
         if(includeExtras)
         try
-        {
-            params = new HashMap<String,Object>();
-            params.put("genreid", -1);//-1 for all artists
-            params.put("artistid", -1);//-1 for all artists
+        {            
+            params.clear();
+            params.put("properties", new String[]{"fanart","thumbnail"});            
             JSONObject allAlbums = callMethod("AudioLibrary.GetAlbums", 1, params);            
-            if(allAlbums.has("result"))
+            if(allAlbums.has("result") && !allAlbums.isNull("result"))
             {
                 JSONArray albums = allAlbums.getJSONObject("result").getJSONArray("albums");
                 for(int a=0;a<albums.length();a++)
@@ -280,6 +298,7 @@ public class XbmcJsonRpc implements Runnable, Constants
                     else albumCount++;
                 }
             }
+            else Config.log(INFO,"No Albums were found in XBMC's library.");
         }
         catch(Exception x)
         {
@@ -290,9 +309,8 @@ public class XbmcJsonRpc implements Runnable, Constants
         try
         {
             params = new HashMap<String,Object>();
-            params.put("genreid", -1);//-1 for all genres
-            params.put("artistid", -1);//-1 for all artists
-            params.put("albumid", -1);//-1 for all albums
+            params.clear();
+            params.put("properties", new String[]{"file","thumbnail","fanart"});
             JSONObject allSongs = callMethod("AudioLibrary.GetSongs", 1, params);            
             if(allSongs.has("result"))
             {
@@ -382,14 +400,13 @@ public class XbmcJsonRpc implements Runnable, Constants
      * {"jsonrpc": "2.0", "method": "Files.GetDirectory", "params": {"directory":"plugin://plugin://plugin.video.hulu/"}, "id": "1"}
      */
 //{"jsonrpc": "2.0", "method": "Files.GetSources", "id": "1", "params": {"media":"video"}}
-
-    
+     
     public void getFiles(
                         Subfolder subf,//the subfolder object we are matching on (also controls recursion)
                         String dir,//the actual directory name (not the label)
                         String fullPathLabel,//the friendly label of the dir, seperated with DELIM
                         final String foldersOrFiles,//Contstant key which tells us what kind of data to return
-                        BlockingQueue<XBMCFile> files//the list which all files/dirs will be added to
+                        BlockingQueue<XBMCFile> filesAndDirsFound//the list which all files/dirs will be added to                        
                         )
     {        
         if(!subf.canAddAnotherVideo()) return;
@@ -397,11 +414,14 @@ public class XbmcJsonRpc implements Runnable, Constants
 
         Map<String, Object> params = new HashMap<String,Object>();
         params.put("directory",dir);
-        params.put("recursive", false);//recursive is not currently working (XBMC bug), so we do our own recursion in this method (better/faster for excludes anyway)
         
-        JSONObject json = callMethod("Files.GetDirectory", 1, params);               
+        final String mediaType = "files";//files should return everything after fix here: http://forum.xbmc.org/showthread.php?t=114921
+        params.put("media", mediaType);        
         
-        if(json == null || !json.has("result"))
+        //PRINT_JSON=true;
+        JSONObject jsonGetDirectory = callMethod("Files.GetDirectory", 1, params);                          
+        
+        if(jsonGetDirectory == null || !jsonGetDirectory.has("result"))
         {
             subf.getSource().setJSONRPCErrors(true);
             Config.log(ERROR, "Failed to get list of files from JSON-RPC, skipping this directory (and all sub-directories): "+ Config.escapePath(fullPathLabel) +" ("+dir+")");
@@ -410,53 +430,67 @@ public class XbmcJsonRpc implements Runnable, Constants
         {
             try
             {
-                JSONObject result = json.getJSONObject("result");
+                JSONObject result = jsonGetDirectory.getJSONObject("result");
+                //process files first, then directories later
+                List<JSONObject> directories = new ArrayList<JSONObject>();//get dirs from the list so we can process them later
+                List<JSONObject> files = new ArrayList<JSONObject>();//files
+                if(result.has("files") && !result.isNull("files"))//as of JSON-RPC v3, both files and dirs are stored in this files[]. Distinguished by filetype attribute
+                {
+                    JSONArray fileArray = result.getJSONArray("files");
+                    for(int i=0;i<fileArray.length();i++)
+                    {
+                        JSONObject fileOrDir = fileArray.getJSONObject(i);
+                        boolean isDirectory = "directory".equalsIgnoreCase(fileOrDir.getString("filetype"));                        
+                        //as on json-rpc v3, filetype is an attribute of the file object... filter our directories here
+                        if(isDirectory) 
+                           directories.add(fileOrDir); //this is a directory, will process dirs after all files
+                        else
+                            files.add(fileOrDir);                       
+                    }
+                    Config.log(DEBUG, "Found "+ files.size() +" files and "+ directories.size() +" directories in "+ Config.escapePath(fullPathLabel));
+                }
+                else Config.log(DEBUG, "No files or directories found for directory: " + fullPathLabel+" ("+dir+")");
+                
+                
+                //find matching FILES
                 //Subfolder matchingSubfolder = source.getMatchingSubfolder(fullPathLabel);//need to check if this really matches a configured subfolder
                 boolean pathIsInSubfolder = subf.pathMatches(fullPathLabel);//we may just be at this point because digdeeper == true, and these files should be skipped in that case
                 if(pathIsInSubfolder)//if this is a configured match, add the files
-                {
-                    if(foldersOrFiles.equals(FILES_ONLY) || foldersOrFiles.equals(FOLDERS_AND_FILES))
+                {                                                                                                                                                                        
+                    if(!files.isEmpty())
                     {
-                        if(result.has("files"))
-                        {
-                            JSONArray fileArray = result.getJSONArray("files");
-                            if(fileArray.length() > 0)
-                            {
-                                for(int i=0;i<fileArray.length();i++)
-                                {
-                                   JSONObject file = fileArray.getJSONObject(i);
-                                   XBMCFile xbmcFile = new XBMCFile(
-                                            FILE,
-                                            file.has("fanart") ? file.getString("fanart") : null,
-                                            file.getString("file"), //required
-                                            file.getString("label"), //required
-                                            file.has("thumbnail") ? file.getString("thumbnail") : null,
-                                            fullPathLabel,
-                                            subf);
+                        for(JSONObject file : files)
+                        {                           
+                           XBMCFile xbmcFile = new XBMCFile(
+                                    FILE,
+                                    file.has("fanart") ? file.getString("fanart") : null,
+                                    file.getString("file"), //required
+                                    file.getString("label"), //required
+                                    file.has("thumbnail") ? file.getString("thumbnail") : null,
+                                    fullPathLabel,
+                                    subf);
 
-                                   boolean allowed = subf.isAllowedByFilters(xbmcFile.getFullPathEscaped());
-                                   if(!allowed) continue;
+                           boolean allowed = subf.isAllowedByFilters(xbmcFile.getFullPathEscaped());
+                           if(!allowed) continue;
 
-                                   boolean excluded = subf.isExcluded(xbmcFile.getFullPathEscaped());
-                                   if(excluded) continue;
+                           boolean excluded = subf.isExcluded(xbmcFile.getFullPathEscaped());
+                           if(excluded) continue;
 
-                                    files.put(xbmcFile);//passed all tests
-                                }
-                            }
+                            filesAndDirsFound.put(xbmcFile);//passed all tests
                         }
-                    }
+                    }                                       
                 }
 
-                if(result.has("directories"))
-                {
-                    JSONArray directories = result.getJSONArray("directories");
-                    for(int i=0;i<directories.length();i++)
+                
+                if(!directories.isEmpty())
+                {                    
+                    for(int i=0;i<directories.size();i++)
                     {
-                        JSONObject direct = directories.getJSONObject(i);
+                        JSONObject directory = directories.get(i);
                         
                         //Remove any '/' from label because it is a reserved character
-                        String label = direct.getString("label");
-                        String file = direct.getString("file");
+                        String label = directory.getString("label");
+                        String file = directory.getString("file");
                         if(tools.valid(label) && label.contains("/"))
                         {
                             Config.log(INFO, "This label contains a '/', will remove it because it is reserved: \""+label+"\"");
@@ -473,13 +507,13 @@ public class XbmcJsonRpc implements Runnable, Constants
                             {
                                 XBMCFile xbmcFile = new XBMCFile(
                                                 DIRECTORY,
-                                                direct.has("fanart") ? direct.getString("fanart") : null,
+                                                directory.has("fanart") ? directory.getString("fanart") : null,
                                                 file, //required
                                                 label, //required
-                                                direct.has("thumbnail") ? direct.getString("thumbnail") : null,
+                                                directory.has("thumbnail") ? directory.getString("thumbnail") : null,
                                                 fullPathLabel,
                                                 subf);
-                                files.put(xbmcFile);
+                                filesAndDirsFound.put(xbmcFile);
                                 Config.log(DEBUG, "Added directory to list: "+ xbmcFile.getFullPathEscaped());
                             }
                             else Config.log(DEBUG, "Not storing folder in list because the path ("+Config.escapePath(fullDirectoryPath)+") does not match the subfolder ("+subf.getFullName()+")");
@@ -497,6 +531,18 @@ public class XbmcJsonRpc implements Runnable, Constants
 
                         pathIsInSubfolder = subf.pathMatches(fullDirectoryPath);//we may just be at this point because digdeeper == true, and these files should be skipped in that case
                         boolean digDeeper =  subf.digDeeper(fullDirectoryPath);
+                        
+                        if(!digDeeper){//check if we have reached max series and end recursion if so (always allow recursion if we are just digging deeper)
+                            boolean reachedMax = false;
+                            if(subf.getMaxSeries() > 0 && subf.getNumberOfSeries() >= subf.getMaxSeries()) reachedMax = true;//maxed out on series, no need to recurse further
+                            else if(!subf.canAddAnotherVideo()) reachedMax = true;//check max video count as wekk                            
+                            
+                            if(reachedMax){
+                                Config.log(INFO, "Reached max (seriescount="+subf.getNumberOfSeries()+"/"+subf.getMaxSeries()+"), canAddAnotherVideo() ="+subf.canAddAnotherVideo()+", not recursing anymore past: " +fullPathLabel);
+                                return;
+                            }                            
+                        }
+                        
                         if(pathIsInSubfolder || digDeeper)//matching Subfolder or need to dig deeper, then go into this dir
                         {
                             boolean excluded;
@@ -516,12 +562,12 @@ public class XbmcJsonRpc implements Runnable, Constants
                                         file,
                                         fullDirectoryPath,
                                         foldersOrFiles,
-                                        files
+                                        filesAndDirsFound
                                         );
                             }
                         }
                         else Config.log(DEBUG, "Skipping because it does not match a Subfolder: "+ Config.escapePath(fullDirectoryPath));
-                    }
+                    }//end looping through directories
                 }
             }
             catch(Exception x)
@@ -543,8 +589,8 @@ public class XbmcJsonRpc implements Runnable, Constants
     public XbmcJsonRpc(String XBMC_SERVER)
     {      
         this.XBMC_SERVER = XBMC_SERVER;
-        if(Config.USE_CURL)
-            useCurl();
+        if(Config.USE_HTTP)
+            useHTTP();
         else useRawTCP();
     }
     public boolean ping()
@@ -672,32 +718,37 @@ public class XbmcJsonRpc implements Runnable, Constants
                             Object value = entry.getValue();
                             cmd += tools.jsonKeyValue(key, value)+", ";
                         }
-                        cmd = cmd.substring(0, cmd.length()-2);//trimm off the extra ", "
+                        cmd = cmd.substring(0, cmd.length()-", ".length());//trimm off the extra ", "
                         cmd += "}";//end params
                 }
                 cmd += ", \"id\": \""+id+"\"}";
         
-        if(userCurl)
+        Config.log(DEBUG, "Connecting to JSON-RPC and sending command: " + cmd);
+        
+        StringBuilder response = new StringBuilder();
+        if(useHTTP)
         {
-            //CURL example: curl.exe -i -X POST -d "{\"jsonrpc\": \"2.0\", \"method\": \"JSONRPC.Version\", \"id\": 1}" http://localhost:8080/jsonrpc
-            cmd = cmd.replace("\"", "\\\"");//need to escape the quotes for the command line to interpret it correctly
+            //HTTP POST
+            //CURL example: curl.exe -i -X POST -d "{\"jsonrpc\": \"2.0\", \"method\": \"JSONRPC.Version\", \"id\": 1}" http://localhost:8080/jsonrpc                        
             
-            String auth = " ";
-            if(tools.valid(Config.JSON_RPC_WEBSERVER_USERNAME) && tools.valid(Config.JSON_RPC_WEBSERVER_PASSWORD))
-            {
-                auth = " --basic -u "+Config.JSON_RPC_WEBSERVER_USERNAME+":"+Config.JSON_RPC_WEBSERVER_PASSWORD+" ";
+            String server = XBMC_SERVER+":"+Config.JSON_RPC_WEBSERVER_PORT+"/jsonrpc";
+            if(!server.toLowerCase().startsWith("http"))
+                server = "http://"+server;            
+            try{
+                String strResponse = tools.post(server, cmd);
+                if(!tools.valid(strResponse)) throw new Exception("No reponse or invalid response code.");
+                response = new StringBuilder(strResponse);//save the response
+                
+            }catch(Exception x){
+                Config.log(ERROR,"Failed to POST to " + server,x);
             }
-            cmd = "\""+Config.BASE_PROGRAM_DIR+SEP+"res"+SEP+"curl"+SEP+"curl.exe\" -i"+auth+"--max-time 30 --connect-timeout 15 --retry 2 --retry-delay 1  -X POST -d \""+cmd+"\" "+XBMC_SERVER+":"+Config.JSON_RPC_WEBSERVER_PORT+"/jsonrpc";
         }
 
-        //Config.log(DEBUG, "JSON-RPC Command = " + cmd);
-        StringBuilder response = new StringBuilder();
-        String curlHeader = "";
+        //Config.log(INFO, "JSON-RPC Command = " + cmd);                
         if(useRawTCP)
         {
             try//send the command to the server
-            {
-                Config.log(DEBUG, "Connecting to JSON-RPC at " + XBMC_SERVER +":"+port +" and sending command: " + cmd);
+            {                
                 jsonRPCSocket = new Socket(XBMC_SERVER, port);
                 PrintWriter out = new PrintWriter(jsonRPCSocket.getOutputStream());                
                 out.print(cmd);
@@ -744,60 +795,19 @@ public class XbmcJsonRpc implements Runnable, Constants
                 return null;
             }
         }
-        else//use curl
-        {
-            try //use curl
-            {
-                final Process process = Runtime.getRuntime().exec(cmd);                
-                InputStream is = process.getInputStream();
-                InputStreamReader isr = new InputStreamReader(is);
-                int timeoutSec = 15;
-                BufferedReader br = new BufferedReader(isr);
-                ReaderTimeout readerWithTimeout = new ReaderTimeout(br, timeoutSec);// second timeout                                
 
-                /*Sample curl output:
-                 HTTP/1.1 200 OK
-                Content-Length: 80
-                Content-Type: application/json
-                Date: Fri, 18 Feb 2011 19:36:12 GMT
-                                                        <------- [start recording here]
-                {
-                   "id" : 1,
-                   "jsonrpc" : "2.0",
-                   "result" : {
-                      "version" : 2
-                   }
-                }
-                 */
-                                                
-                boolean startRecording = false;
-                for(String line : readerWithTimeout.getLines())
-                {
-                  
-                    if(!startRecording)
-                        if(line.trim().isEmpty())
-                            startRecording = true;//skip the header. look for the blank line between header and content
-                        else
-                            curlHeader += line+LINE_BRK;
-                    if(startRecording)
-                        response.append(line).append(LINE_BRK);
-                }                                              
-            }
-            catch (Exception x)
-            {
-                Config.log(ERROR, "Failed while executing curl command: "+ cmd,x);
-            }
-        }
-
-        //Config.log(DEBUG, "Response = \r\n"+response);//{   "id" : "1",   "jsonrpc" : "2.0",   "result" : "OK"}
+        if(PRINT_JSON)
+            Config.log(INFO, "Response from "+cmd+" \r\n"+response);//{   "id" : "1",   "jsonrpc" : "2.0",   "result" : "OK"}
+        
         try
         {
             JSONObject obj = new JSONObject(response.toString().trim());
+            
             return obj;
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "The response from XBMC is not a valid JSON string:"+LINE_BRK+curlHeader+response);
+            Config.log(WARNING, "The response from XBMC is not a valid JSON string:"+LINE_BRK+response);
             return null;
         }
     }

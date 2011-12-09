@@ -5,8 +5,6 @@ import utilities.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.*;
-import org.jdom.*;
-import org.jdom.input.SAXBuilder;
 import org.apache.commons.io.FileUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -17,6 +15,16 @@ public class importer extends Config implements Constants
     public static void main(String[] args)
     {
         long start = System.currentTimeMillis();
+        if(args.length == 0)
+        {
+            Config.log(INFO, "Attempting to auto-determine base directory. If this fails, specify the base directory of this program as a command line parameter.");
+            BASE_PROGRAM_DIR = getBaseDirectory();
+        }
+        else 
+            BASE_PROGRAM_DIR = args[0];
+        
+        Config.log(NOTICE, "Base program dir = "+ BASE_PROGRAM_DIR);
+        
         importer i = null;
         try
         {            
@@ -34,7 +42,7 @@ public class importer extends Config implements Constants
         }
         catch(Exception x)
         {
-            log(ERROR, "Cannot continue, general error occurred: "+ x,x);
+            log(ERROR, "Cannot continue, general error occurred: "+ x,x);            
         }
         finally
         {
@@ -44,7 +52,7 @@ public class importer extends Config implements Constants
 
             setShortLogDesc("Ending");
             Config.log(NOTICE,"Done... Total processing time: "+ (seconds/60) +" minute(s), "+ (seconds%60)+" second(s)");
-            Config.end();//stop all the background processes
+            Config.end();//stop all the background processes            
         }
     } 
 
@@ -52,10 +60,10 @@ public class importer extends Config implements Constants
     public importer()
     {
         //Load Config
-         super(MY_LIBRARY);
+        super(MY_LIBRARY);
                   
-         loadedConfigSuccessfully = loadConfig();
-         setLoadedConfig(loadedConfigSuccessfully);
+        loadedConfigSuccessfully = loadConfig();
+        setLoadedConfig(loadedConfigSuccessfully);
         if(!loadedConfigSuccessfully)
         {
             log(ERROR, "Failed while loading Configuration and testing connections... cannot continue. Please check your settings in Config.xml");            
@@ -85,17 +93,25 @@ public class importer extends Config implements Constants
     {
                         
         setShortLogDesc("Init");
-        XbmcJsonRpc jsonRPC = new XbmcJsonRpc(JSON_RPC_SERVER);       
+        XbmcJsonRpc jsonRPC = new XbmcJsonRpc(JSON_RPC_SERVER);     
+        
+        if(false)
+        {
+            //Config.LOGGING_LEVEL = DEBUG;
+            jsonRPC.getLibraryMusic(true);
+            jsonRPC.getLibraryVideos(true);
+            if(1==1) return false;
+        }
         
         //check if XBMC should be restarted
         if(RESTART_XBMC)
-        {
+        {            
             String restartCmdFile = BASE_PROGRAM_DIR+SEP+"res"+SEP+"RestartXBMC.cmd";
             log(NOTICE, "Restart XBMC is enabled, will send Quit command to XBMC, then execute restart script at: "+ restartCmdFile);
             //set quit commnd
             if(jsonRPC.ping())
             {
-                JSONObject response = jsonRPC.callMethod("XBMC.Quit", 1, null);
+                JSONObject response = jsonRPC.callMethod("Application.Quit", 1, null);
                 if(response != null)
                 {
                     try
@@ -118,7 +134,7 @@ public class importer extends Config implements Constants
                     }                    
                 }
                 else
-                    log(WARNING, "Failed to call XBMC.Quit. Will now attempt to execute restart script at: "+ restartCmdFile);
+                    log(WARNING, "Failed to call XBMC.Quit. XBMC may not be running. Will now execute restart script at: "+ restartCmdFile);
             }
              else log(INFO, "JSON-RPC could not connect to XBMC, will execute restart script and test connectivity again: "+ restartCmdFile);
             
@@ -127,11 +143,16 @@ public class importer extends Config implements Constants
                 ProcessBuilder pb = new ProcessBuilder("\""+restartCmdFile+"\"");
                 pb.redirectErrorStream();
                 log(INFO, "Executing restart script for XBMC.");
-                java.lang.Process pr = pb.start();//don't read input/wait because it won't end until XBMC ends
-                int sec = 10;
-                log(INFO, "Restart executed. Will wait "+sec+" seconds for XBMC to start up...");
-                try{Thread.sleep(1000 * sec);}catch(Exception x){}
-                boolean connected = jsonRPC.ping();
+                java.lang.Process pr = pb.start();//don't read input/wait because it won't end until XBMC ends                
+                log(INFO, "Restart executed. Waiting for JSON-RPC connectivity to resume...");
+                try{Thread.sleep(3000);}catch(Exception x){}
+                boolean connected = false;
+                for(int i=0;i<3;i++)
+                {
+                     connected = jsonRPC.ping();
+                     if(connected) break;
+                     else try{Thread.sleep(2000);}catch(Exception ignored){}//wait & try again until loop runs out
+                }
                 if(!connected)
                 {
                     log(ERROR, "It appears XMBC did not restart. JSON-RPC connectivity cannot be re-established. "
@@ -155,7 +176,7 @@ public class importer extends Config implements Constants
         if(!connected)
         {
             log(ERROR, "Cannot continue because JSON-RPC is not connected. Please check that XBMC is running at: "+ JSON_RPC_SERVER
-                    +(!USE_CURL ?" and TCP Port 9090 is not blocked":" and the XBMC webserver is running at port: "+ XBMC_SERVER_WEB_PORT));
+                    +(!USE_HTTP ?" and TCP Port 9090 is not blocked":" and the XBMC webserver is running at port: "+ XBMC_SERVER_WEB_PORT));
             return false;
         }
         
@@ -176,7 +197,7 @@ public class importer extends Config implements Constants
                      sourcesParams.put("media", "video");
                      JSONObject xbmcSources = jsonRPC.callMethod("Files.GetSources", 1, sourcesParams);
                      JSONObject result = xbmcSources.getJSONObject("result");
-                     JSONArray sourceArray = result.getJSONArray("shares");
+                     JSONArray sourceArray = result.getJSONArray("sources");
                      for(int i=0;i<sourceArray.length();i++)
                      {
                          JSONObject nextSource = sourceArray.getJSONObject(i);
@@ -204,11 +225,14 @@ public class importer extends Config implements Constants
                  }
              }
 
-             /*Disable all IceFilms support because their servers appparantly can't handle the bandwidth used by this program/icefilms plugin*/
-             if(source.getPath().toLowerCase().contains(ICEFILMS_IDENTIFIER_LC))
-             {
-                 log(WARNING, "IceFilms support has been disabled. Skipping IceFilms source. See here for details: http://forum.icefilms.info/viewtopic.php?f=24&t=21205");
-                 continue;
+             
+             if(false)
+             {/*Disable all IceFilms support because their servers appparantly can't handle the bandwidth used by this program/icefilms plugin*/
+                 if(source.getPath().toLowerCase().contains(ICEFILMS_IDENTIFIER_LC))
+                 {
+                     log(WARNING, "IceFilms support has been disabled. Skipping IceFilms source. See here for details: http://forum.icefilms.info/viewtopic.php?f=24&t=21205");
+                     continue;
+                 }
              }
              
              for(Subfolder subf : source.getSubfolders())
@@ -218,6 +242,7 @@ public class importer extends Config implements Constants
                 setShortLogDesc("Find:Subfolder");
                 //get the subfolder from JSON-RPC to determine what xbmc path it's name maps to
                 log(INFO, "Searching for subfolder: " + escapePath(fullPathLabel));
+                
                 XBMCFile subfolderDir =  jsonRPC.getSubfolderDirectory(subf);
                 if(subfolderDir == null) continue;
                 setShortLogDesc("Found!");
@@ -239,12 +264,12 @@ public class importer extends Config implements Constants
                 log(NOTICE, "Finding all matching videos under subfolder: "+ subfolderDir.getFullPathEscaped());
                 try
                 {
-                    jsonRPC.getFiles(
+                    jsonRPC.getFiles(//recursively list all files in this subdirectory (based on filters)
                         subf,
                         subfolderDir.getFile(),
                         subfolderDir.getFullPath(),
                         FILES_ONLY,
-                        filesInThisSubfolder);                    
+                        filesInThisSubfolder);                                           
                 }
                 catch(Exception x)
                 {
@@ -252,9 +277,8 @@ public class importer extends Config implements Constants
                 }
                 finally
                 {
-                    archiver.canStop();//let it know that the queue is not being fed any more
+                    archiver.canStop();//let it know that the queue is not being fed any more so the archive can finishe once it runs out of files to check
                 }
-
                 log(NOTICE, "Done retrieving files from JSON-RPC for subfolder: "+subf.getFullName());
 
                 //wait for archiver to finish if need
@@ -278,7 +302,7 @@ public class importer extends Config implements Constants
             }//end looping thru the subfolders of this source
              
             //clean the dropbox for this source's archived videos (as long as there weren't errors getting the videos from this source)
-            if(true | //for now, always clean, regardless of errors
+            if(true || //for now, always clean, regardless of errors
                     !source.hadJSONRPCErrors())//TODO: investigate this. hadJSONErrors was true too many times for large sources, such as PlayOn, preventing clean-ups. Maybe the clean-up thresholds in condig.xml are enough?
             {
                cleanDropbox(source);
@@ -298,7 +322,7 @@ public class importer extends Config implements Constants
         }
         else
         {
-             Config.log(NOTICE, Archiver.globalarchiveSuccess +" vidoes were successfully archived/updated. Triggering XBMC content scan");
+             Config.log(NOTICE, Archiver.globalarchiveSuccess +" videos were successfully archived/updated. Triggering XBMC content scan");
              //trigger XBMC databaase update and integrate meta-data changes. Also do manual archiving after intitial update (if enabled)
              for(int loop=1; loop<=(MANUAL_ARCHIVING_ENABLED ? 2 : 1);loop++)//need to loop 2 times if manual archiving is enabled, 2nd time is after .nfo generation
              {
@@ -306,14 +330,14 @@ public class importer extends Config implements Constants
                 log(INFO, "Getting baseline number of videos in library before triggering update.");
                 int prevCount = jsonRPC.getLibraryVideos().size();
 
-                log(NOTICE, "Triggering content scan via JSON-RPC interface by calling VideoLibrary.ScanForContent");
-                JSONObject result = jsonRPC.callMethod("VideoLibrary.ScanForContent", 1, null);
+                log(NOTICE, "Triggering content scan via JSON-RPC interface by calling VideoLibrary.Scan");
+                JSONObject result = jsonRPC.callMethod("VideoLibrary.Scan", 1, null);
                 String strResult;
                 try{strResult = result.getString("result");}catch(Exception x){strResult = "[no result available]";}
-                log(NOTICE, "VideoLibrary.ScanForContent Result = \"" + strResult+"\"");
+                log(NOTICE, "VideoLibrary.Scan Result = \"" + strResult+"\"");
                 if(!strResult.equalsIgnoreCase("OK"))
                 {
-                    log(WARNING, "JSON-RPC XBMC interface for method 'VideoLibrary.ScanForContent' failed; Will not add meta-data or do Manual Archiving. Result = \""+strResult+"\"");
+                    log(WARNING, "JSON-RPC XBMC interface for method 'VideoLibrary.Scan' failed; Will not add meta-data or do Manual Archiving. Result = \""+strResult+"\"");
                 }
                 else//update trigger was successful
                 {
@@ -397,7 +421,7 @@ public class importer extends Config implements Constants
 
         if(numberOfUnfinishedDownloads != 0)
         {
-            log(INFO, "Skipping downloading more vidoes until the " + numberOfUnfinishedDownloads +" unfinished download"+(numberOfUnfinishedDownloads==1?"":"s")+" finish"+(numberOfUnfinishedDownloads==1?"es":""));
+            log(INFO, "Skipping downloading more videos until the " + numberOfUnfinishedDownloads +" unfinished download"+(numberOfUnfinishedDownloads==1?"":"s")+" finish"+(numberOfUnfinishedDownloads==1?"es":""));
             return;
         }
         else//another download can be started
@@ -834,7 +858,8 @@ public class importer extends Config implements Constants
                     List<String> strFiles = archivedFilesDB.getStringList("SELECT file FROM DownloadFiles WHERE download_id = "+ downloadId);
                     if(strFiles.isEmpty())
                     {
-                        log(WARNING, "No downloaded files were found in the database for this download. Cannot continue.");
+                        log(WARNING, "No downloaded files were found in the database for this download. Cannot continue. Will remove this download from tracking database.");
+                        tools.removeDownloadFromDB(downloadId);                        
                         continue;
                     }
 
@@ -845,7 +870,8 @@ public class importer extends Config implements Constants
                         if(!valid(filePath) || !(new File(filePath).exists()))
                         {
                             //check if the .part exists
-                            Config.log(WARNING, "Cannot process finished download because the file at: \""+ filePath +"\" does not exist or the path is invalid. Skippping.");
+                            Config.log(WARNING, "Cannot process finished download because the file at: \""+ filePath +"\" does not exist or the path is invalid. Will remove this download from tracking database.");
+                            tools.removeDownloadFromDB(downloadId);
                             allFilesExist = false;
                         }
                         downloadedFiles.add(new File(filePath));
@@ -975,11 +1001,15 @@ public class importer extends Config implements Constants
                             File encodedFile = (useCompression ? new File(pathNoExt+"."+cd.getEncodeToExt()) : null);
                             final String downloadedFilePath = downloadedFile.toString();//get path before moving
                             sourceFile = (useCompression) ? encodedFile : downloadedFile;
+                            if(destFile.exists()){
+                                log(WARNING, "The destination file already exists, will over-write it at: "+ destFile);
+                                destFile.delete();
+                            }
                             log(NOTICE, "Moving video file from "+ sourceFile +" to "+ destFile);
                             FileUtils.moveFile(sourceFile , destFile);
                             log(INFO, "Successfully moved the file!");
                             File edl = new File(tools.fileNameNoExt(sourceFile)+".edl");
-                            File edlDest= new File(tools.fileNameNoExt(destFile)+".edl");
+                            File edlDest= new File(tools.fileNameNoExt(destFile)+".edl");                            
                             if(edl.exists())
                             {
                                 if(!edlDest.exists() || edlDest.delete())//if dest edl already exists, delte it and use the edl from the original video

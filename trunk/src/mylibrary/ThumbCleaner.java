@@ -12,9 +12,19 @@ public class ThumbCleaner extends Config implements Constants
 {
 
     public static void main(String[] args)
-    {        
+    {                
         try
-        {           
+        {              
+            if(args.length == 0)
+            {
+                Config.log(INFO, "Attempting to auto-determine base directory. If this fails, specify the base directory of this program as a command line parameter.");
+                BASE_PROGRAM_DIR = getBaseDirectory();
+            }
+            else 
+                BASE_PROGRAM_DIR = args[0];
+
+            Config.log(NOTICE, "Base program dir = "+ BASE_PROGRAM_DIR);
+        
             ThumbCleaner c = new ThumbCleaner();            
         }
         catch(Exception x)
@@ -336,9 +346,7 @@ public class ThumbCleaner extends Config implements Constants
                 XBMC_MYSQL_VIDEO_SCHEMA = "xbmc_video";
                 XBMC_MYSQL_MUSIC_SCHEMA = "xbmc_music";
             }
-        }
-
-        
+        }        
 
         boolean isSqlLite = DATABASE_TYPE.equals(SQL_LITE);
         String schemaOrDBPath = (isSqlLite ? sqlLiteVideoDBPath : XBMC_MYSQL_VIDEO_SCHEMA);
@@ -402,15 +410,7 @@ public class ThumbCleaner extends Config implements Constants
         for(String folder : getTVShowPaths())
         {
             //Config.log(INFO, "TV Show Path = "+ path);//18a529ac
-            createAndSaveHash(folder);//the tv show hash (for fanart/show banner)
-
-            //add 100 seasons to make sure we catch everything
-            //TODO: this probably isn't necessary as all seasons are retrieved from JSON-RPC
-            /*
-            for(int i=1;i<=100;i++)
-                createAndSaveHash("season"+path+"Season "+ i);
-             * */
-             
+            createAndSaveHash(folder);//the tv show hash (for fanart/show banner)                         
 
             //add the All Seasons hash. "* All Seasons" is the typical english label
             createAndSaveHash("season"+folder +"* All Seasons");
@@ -498,7 +498,7 @@ public class ThumbCleaner extends Config implements Constants
          */
         setShortLogDesc("JSON-RPC:Video");
         //for extra insurance, get list of all videos and hash's from JSON-RPC
-        Config.log(NOTICE, "Adding JSON-RPC videos/audio to catch any hashs that weren't generated from MySQL data. This may take a while...");
+        Config.log(NOTICE, "Adding JSON-RPC videos/audio to catch any hashs that weren't generated from SQL DB data. This may take a while...");
 
         //video
         Config.log(INFO, "Adding hashs from JSON-RPC video library items");
@@ -782,13 +782,16 @@ public class ThumbCleaner extends Config implements Constants
         int attempts = 0;
         int maxAttempts = Math.abs((int) Math.round(numberToCheck * 3.5));//to prevent infinite loop
 
-        if(!invalidThumbs.isEmpty())
+        if(invalidThumbs.isEmpty()){
+            Config.log(INFO,"No thumbs/fanart found to copy to spot-check directory. Skipping.");
+        }
+        else
         while(true)
         {
             attempts++;
             if(attempts > maxAttempts) break;
-            File f = invalidThumbs.get(r.nextInt(invalidThumbs.size()));
-            if(f.getName().endsWith(".tbn"))
+            File f = invalidThumbs.get(r.nextInt(invalidThumbs.size()));            
+            if(!f.getName().endsWith(".dds"))//ignore dds since they aren't easily opened and they always have a twin that can be opened
             {
                 int dotIndx = f.getName().lastIndexOf(".");
                 String newName = f.getName().substring(0, dotIndx==-1 ? f.getName().length() : dotIndx);
@@ -829,10 +832,11 @@ public class ThumbCleaner extends Config implements Constants
     private void putHash(String hash, String hashSource)
     {
         if(!isValidHash(hash))
-        {
+        {//sanity check our generated hash
             Config.log(WARNING, "Skipping invalid hash: \""+ hash +"\" from " + hashSource);
             return;
         }
+        
         String currentPath = validHashs.get(hash);
         boolean alreadyExists = currentPath != null;
         if(alreadyExists)

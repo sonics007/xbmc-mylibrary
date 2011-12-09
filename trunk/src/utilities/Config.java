@@ -67,16 +67,11 @@ public class Config implements Constants
     public static long JSON_RPC_RESPONSE_TIMEOUT_MS = 50;//the millisecond timeout once data starts being received to know that all data has been receieved
     public static long JSON_RPC_TIMEOUT_SECONDS = 60;//time timeout in seconds to wait for json-rpc to start sending data after a request has been made
     public static String JSON_RPC_SERVER = "[unknown]";
-    public static boolean USE_CURL = false;
+    public static boolean USE_HTTP = false;
     public static int JSON_RPC_WEBSERVER_PORT = 8080;
     public static String JSON_RPC_WEBSERVER_USERNAME = "";
     public static String JSON_RPC_WEBSERVER_PASSWORD = "";    
-
-    //Restart PlayOn before scan
-    public static boolean RESTART_PLAYON_BEFORE_SCAN = false;
-    public static boolean RESTART_PLAYON_ONLY_IF_NOT_STREAMING = false;    
-    public static List<String> PLAYON_CLIENT_IP_RANGES = new ArrayList<String>();
-    public static String PLAYON_SERVICE_NAME = "MediaMall Server";
+    
 
     //IP Change
     public static boolean IP_CHANGE_ENABLED = false;
@@ -130,8 +125,7 @@ public class Config implements Constants
         if(!SingleInstance.isSingleInstance()) System.exit(1);
 
         
-        BASE_PROGRAM_DIR = getBaseDirectory();
-        Config.log(NOTICE, "Base program dir = "+ BASE_PROGRAM_DIR);
+        
                 
 
          //populate charactes that we do not allow in file names
@@ -264,13 +258,13 @@ public class Config implements Constants
         //JSON-RPC
         Map<String,String> jsonRPCChildren = getChildren(root.getChild("JSONRPC"));
         JSON_RPC_SERVER = jsonRPCChildren.get("xbmcname");
-        USE_CURL = "curl".equalsIgnoreCase(jsonRPCChildren.get("method"));
+        USE_HTTP = "http".equalsIgnoreCase(jsonRPCChildren.get("method"));
         JSON_RPC_WEBSERVER_PORT = tools.isInt(jsonRPCChildren.get("port")) ? Integer.parseInt(jsonRPCChildren.get("port")) : 8080;
         JSON_RPC_WEBSERVER_USERNAME = jsonRPCChildren.get("username");
         JSON_RPC_WEBSERVER_PASSWORD = jsonRPCChildren.get("password");
         JSON_RPC_TIMEOUT_SECONDS = tools.isInt(jsonRPCChildren.get("timeout")) ? Integer.parseInt(jsonRPCChildren.get("timeout")) : 60;
         if(IS_THUMB_CLEANER) JSON_RPC_RESPONSE_TIMEOUT_MS *= 1.5;//allow extra timeout because queries aren't as rapid
-        log(INFO, "JSON-RPC config: XBMCName="+JSON_RPC_SERVER+", timeout="+JSON_RPC_TIMEOUT_SECONDS+" seconds, method="+(USE_CURL ? "Curl, port="+JSON_RPC_WEBSERVER_PORT+", username="+JSON_RPC_WEBSERVER_USERNAME+", password="+JSON_RPC_WEBSERVER_PASSWORD : "Raw, port=9090"));
+        log(INFO, "JSON-RPC config: XBMCName="+JSON_RPC_SERVER+", timeout="+JSON_RPC_TIMEOUT_SECONDS+" seconds, method="+(USE_HTTP ? "HTTP, port="+JSON_RPC_WEBSERVER_PORT+", username="+JSON_RPC_WEBSERVER_USERNAME+", password="+JSON_RPC_WEBSERVER_PASSWORD : "Raw, port=9090"));
         
 
          //thumbnail dir
@@ -406,39 +400,7 @@ public class Config implements Constants
             Element restartXBMCElem = root.getChild("XBMCRestart");
             if(restartXBMCElem == null)Config.log(WARNING, "No <XBMCRestart> element found, defaulting to restart="+RESTART_XBMC);
             else RESTART_XBMC = "true".equalsIgnoreCase(restartXBMCElem.getAttributeValue("enabled"));
-            log(DEBUG, "XBMCRestart enabled = "+ RESTART_XBMC);
-            
-            //Restart Service Before Scan
-            RESTART_PLAYON_BEFORE_SCAN = false;//todo: review if this is wanted anymore. currently disabling
-            /*
-            Element restartB4Scan = root.getChild("RestartServiceBeforeScan");
-            if(restartB4Scan != null)
-            {
-                PLAYON_SERVICE_NAME = restartB4Scan.getChildText("ServiceName");
-                RESTART_PLAYON_BEFORE_SCAN = "true".equalsIgnoreCase(restartB4Scan.getAttributeValue("enabled"));
-                if(RESTART_PLAYON_BEFORE_SCAN)
-                {
-                    Element restartOnlyIfNotStreaming = restartB4Scan.getChild("SkipRestartIfCurrentlyStreaming");
-                    RESTART_PLAYON_ONLY_IF_NOT_STREAMING = "true".equalsIgnoreCase(restartOnlyIfNotStreaming.getAttributeValue("enabled"));
-                    if(RESTART_PLAYON_ONLY_IF_NOT_STREAMING)
-                    {
-                        //PLAYON_MEDIA_DIR = restartOnlyIfNotStreaming.getChildText("PlayOnMediaDir");
-                        Element ipRanges = restartOnlyIfNotStreaming.getChild("ClientIPRanges");
-                        List<Element> ranges = ipRanges.getChildren();
-                        for(Element range : ranges)
-                        {
-                            String strRange = range.getText();
-                            //verify
-                            if(tools.verifyIpRange(strRange))
-                                PLAYON_CLIENT_IP_RANGES.add(strRange);
-                            else
-                                log(WARNING, "This IP range is not valid and won't be used to filter clients: \""+strRange+"\" is not in format \"xxx.xxx.xxx.xxx-xxx.xxx.xxx.xxx\"");
-                        }
-                    }
-                }
-            }
-            Config.log(INFO, "Restart PlayOn service before scan = " + RESTART_PLAYON_BEFORE_SCAN +". Only if not currently streaming = "+ RESTART_PLAYON_ONLY_IF_NOT_STREAMING +". Streaming client IP ranges = "+ Arrays.toString(PLAYON_CLIENT_IP_RANGES.toArray()));
-            */
+            log(DEBUG, "XBMCRestart enabled = "+ RESTART_XBMC);                        
             
             //LibraryScanWaitMinutes
             Element libraryScanWaitMinElem = root.getChild("LibraryScanWaitMinutes");
@@ -1407,10 +1369,13 @@ public class Config implements Constants
     
     public static void end()
     {
+        try{if(SINGLE_INSTANCE_SOCKET != null) SINGLE_INSTANCE_SOCKET.close();}catch(Exception x){Config.log(WARNING, "Failed to close single instance socket...",x);}finally{SINGLE_INSTANCE_SOCKET=null;}
         if(logger != null)logger.canStop();        
         if(queuedChangesDB != null)queuedChangesDB.close();
         if(archivedFilesDB != null)archivedFilesDB.close();
         if(scraperDB != null)scraperDB.close();
-        try{if(SINGLE_INSTANCE_SOCKET != null) SINGLE_INSTANCE_SOCKET.close();}catch(Exception x){}finally{SINGLE_INSTANCE_SOCKET=null;}
+        
+        
+        
     }
 }

@@ -201,8 +201,8 @@ public class XBMCInterface implements Constants
                 //check if it is in the database
                 String videoExistsSql = "SELECT idFile "
                     + "FROM files "
-                    + "WHERE "+(limitByPath ? "idPath IN(SELECT idPath FROM path WHERE strPath = "+tools.sqlString(xbmcPath)+") AND " : "")
-                           + "strFileName = "+tools.sqlString(fileName);
+                    + "WHERE "+(limitByPath ? "idPath IN(SELECT idPath FROM path WHERE lower(strPath) = "+tools.sqlString(xbmcPath).toLowerCase()+") AND " : "")
+                           + "lower(strFileName) = "+tools.sqlString(fileName).toLowerCase();
                 
                 int fileId = dbConnection.getSingleInt(videoExistsSql);
                 if(fileId == SQL_ERROR) throw new Exception("Error determining file id using: "+ videoExistsSql);
@@ -327,7 +327,7 @@ public class XBMCInterface implements Constants
                     }
                 }
                  else
-                     throw new Exception("This video: \""+archivedVideo+"\" is not yet in XBMC's database"
+                     throw new Exception("this video: \""+archivedVideo+"\" is not yet in XBMC's database"
                              + " (as determined by "+videoExistsSql+") so meta data will remain in queue.");
             }
             catch(Exception x)
@@ -549,8 +549,9 @@ public class XBMCInterface implements Constants
                 String path = mpg.getPath();
                 String sql = "SELECT idFile "
                     + "FROM files "
-                    + "WHERE idPath IN(SELECT idPath FROM path WHERE strPath = "+tools.sqlString(getFullXBMCPath(mpg.getParentFile()))+") "
-                           + "AND strFileName = "+tools.sqlString(mpg.getName());
+                    + "WHERE idPath IN(SELECT idPath FROM path WHERE LOWER(strPath) = "+tools.sqlString(getFullXBMCPath(mpg.getParentFile())).toLowerCase()+") "
+                           + "AND lower(strFileName) = "+tools.sqlString(mpg.getName().toLowerCase());
+                
                 int fileId = dbConnection.getSingleInt(sql);
 
                 if(fileId == SQL_ERROR)
@@ -587,7 +588,7 @@ public class XBMCInterface implements Constants
                 }
                 else// not added to the library yet
                 {
-                    Config.log(Config.INFO,"SKIPPING: Not changing to .strm because video is not yet in XBMC's library: "+ mpg + (Config.LOGGING_LEVEL==DEBUG ? " (as determined by: "+sql+")":""));
+                    Config.log(Config.INFO,"SKIPPING: Not changing to .strm because video is not yet in XBMC's library: "+ mpg +  " (as determined by: "+sql+")");
                     filesNotInDB++;
                 }
             }
@@ -796,7 +797,7 @@ public class XBMCInterface implements Constants
 
     public int getPathIdFromPathString(String path)
     {
-        String sql = "SELECT idPath FROM path WHERE strPath = " + tools.sqlString(path);
+        String sql = "SELECT idPath FROM path WHERE lower(strPath) = "+ tools.sqlString(path).toLowerCase();
         Config.log(Config.DEBUG, "Getting pathId with: " + sql);
         int pathId = dbConnection.getSingleInt(sql);
         return pathId;
@@ -810,7 +811,7 @@ public class XBMCInterface implements Constants
         if(pathId > -1)
         {
             //get the file id based on path id and fileName
-            String sql = "SELECT idFile FROM files WHERE idPath = " + pathId + " AND strFilename = " + tools.sqlString(fileName);
+            String sql = "SELECT idFile FROM files WHERE idPath = " + pathId + " AND lower(strFilename) = " + tools.sqlString(fileName).toLowerCase();
             Config.log(Config.DEBUG, "Getting fileId with: " + sql);
             fileId = dbConnection.getSingleInt(sql);
         }

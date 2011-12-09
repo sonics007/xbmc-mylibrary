@@ -104,7 +104,7 @@ public class Archiver implements Runnable, Constants
                 }
                 catch(InterruptedException x)
                 {
-                    Config.log(ERROR, "Interrupted while archiving vidoes from queue. Cannot continue.",x);
+                    Config.log(ERROR, "Interrupted while archiving videos from queue. Cannot continue.",x);
                     STOP = true;
                     break;
                 }
@@ -246,12 +246,8 @@ public class Archiver implements Runnable, Constants
         if(video.hasValidMetaData())
         {
             //check for max limits (max video was checked at beginning of this method and does not need to be checked again here)
-            boolean withinLimits = true;//default for non-tv types
-            if(video.isTvShow())
-            {
-                //check series limit
-                withinLimits = subf.canAddAnotherSeries(video.getSeries());
-            }            
+            boolean withinLimits = video.isWithinLimits(subf);
+            
 
             if(withinLimits)
             {
@@ -412,7 +408,6 @@ public class Archiver implements Runnable, Constants
             {
                 //ice films custom parsing
                 IceFilmsArchiver.Archive(video);
-
             }
             else //default handling of file, not a known type
             {
@@ -443,6 +438,7 @@ public class Archiver implements Runnable, Constants
                 String label = video.getFileLabel();
                 if(valid(label))
                 {                    
+                    Config.log(DEBUG, "Getting music video title from: "+ label);
                     final String splitter = " - ";
                     int splitIndex = label.indexOf(splitter);
                     if(splitIndex != -1)
@@ -451,11 +447,12 @@ public class Archiver implements Runnable, Constants
                         String title = label.substring(splitIndex+splitter.length(), label.length());
                         
                         //clean out featuring artists, etc.
-                        MusicVideoScraper.cleanMusicVideoLabel(artist);
-                        MusicVideoScraper.cleanMusicVideoLabel(title);
+                        artist = MusicVideoScraper.cleanMusicVideoLabel(artist);
+                        title = MusicVideoScraper.cleanMusicVideoLabel(title);
                         
+                        Config.log(DEBUG, "Artist="+artist+". Title="+title);
                         video.setArtist(artist);
-                        video.setTitle(title);
+                        video.setTitle(title);                        
                     }
                     else throw new Exception("Not in \"Artist - Title\" format.");
                 }
@@ -662,11 +659,14 @@ public class Archiver implements Runnable, Constants
             log(DEBUG, "Movie Set not allowed for " + typeOfMetaData+", Skipping.");
             return;
         }
+        /* Allowing prefix and suffix for movies because movies do not always show up in sets depending on how you look for them in the library
+         * the prefix/suffix gives users an alternate way to tag movies archived by this tool
         if(file.isMovie() && (typeOfMetaData.equals(PREFIX) || typeOfMetaData.equals(SUFFIX) ))
         {
             log(DEBUG, "Prefix/Suffix not allowed for movie type (Only Movie Set is allowed). Skipping.");
                 return;
-        }
+        }         
+         */
                 
         String dropboxFileLocation = tools.convertToStrm(file.getFinalLocation());//always stored as a .strm in the db
         boolean success = tools.addMetaDataChangeToDatabase(file, typeOfMetaData, value);

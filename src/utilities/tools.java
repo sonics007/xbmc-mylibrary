@@ -3,14 +3,18 @@ package utilities;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLDecoder;
@@ -148,6 +152,7 @@ public class tools implements Constants
             else if(Config.ILLEGAL_FILENAME_CHARS.get((int) c) == null)
                 normal += c;
         }
+        
        return stripInvalidXMLChars(normal.trim());
     }
     public static boolean isInt(String s)
@@ -702,6 +707,32 @@ public class tools implements Constants
             Config.archivedFilesDB.closeStatement();
             return incompleteDownloads;
         }
+    }
+    
+    public static boolean removeDownloadFromDB(int download_id)
+    {
+                
+        String[] sqls = new String[]{
+            "DELETE FROM downloads WHERE id = "+download_id,
+            "DELETE FROM DownloadFiles WHERE download_id = "+ download_id};
+    
+        for(String sql : sqls)
+        {
+            try
+            {
+                Config.archivedFilesDB.getStatement().executeUpdate(sql);            
+            }
+            catch(Exception x)
+            {
+                Config.log(ERROR, "Failed to delete download from database using: "+ sql,x);
+                return false;
+            }
+            finally
+            {
+                Config.archivedFilesDB.closeStatement();            
+            }
+        }
+        return true;//got to end w/o error
     }
     public static boolean trackArchivedFile(String sourceName, String dropboxLocation, XBMCFile video)
     {
@@ -1562,5 +1593,90 @@ public class tools implements Constants
             jsonString = jsonString.replace("/", "");//TODO: fix thing when slash's can be escaped
         }
         return jsonString;
+    }
+    
+    /*
+     * Returns null if fail, otherwise returns the String response from the post
+     */
+    public static String post(String strUrl, String data) throws Exception{
+        URL url = new URL(strUrl);
+        
+        final String method = "POST";
+        final String host = url.getHost();
+        final String contentType = "application/x-www-form-urlencoded";
+        final int contentLength = getContentLength(data);
+        final String encoding = "UTF-8";//good idea?        
+        final String connection = "Close";// "keep-alive";
+        
+        Config.log(DEBUG, "Sending data to: "+ url+" (host="+host+", encoding="+encoding+", method="+method+", Content-Type="+contentType+", Content-Length="+contentLength+", Connection="+connection+"):"
+                            +"\r\n"+data);        
+        
+        HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+        conn.setDoOutput(true);//let it know we are writing data  
+        conn.setRequestMethod(method);//POST
+        conn.setRequestProperty("host", host);        
+        conn.setRequestProperty("content-type", contentType);
+        conn.setRequestProperty("Content-Encoding", encoding);
+        conn.setRequestProperty("content-length", contentLength+"");                                      
+        conn.setRequestProperty("connection", connection);                
+        
+        //authenticate if used
+        if(tools.valid(Config.JSON_RPC_WEBSERVER_USERNAME) && tools.valid(Config.JSON_RPC_WEBSERVER_PASSWORD)){
+            String authString = Config.JSON_RPC_WEBSERVER_USERNAME + ":" + Config.JSON_RPC_WEBSERVER_PASSWORD;            
+            String authStringEnc = new sun.misc.BASE64Encoder().encode(authString.getBytes());
+            conn.setRequestProperty("Authorization", "Basic " + authStringEnc);
+        }
+        
+        conn.setReadTimeout((int) (Config.JSON_RPC_TIMEOUT_SECONDS*1000));
+        
+        //send data the to remote server
+        OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
+        writer.write(data);
+        writer.flush();
+        writer.close();
+        
+        int responseCode = 400;
+        try{
+            responseCode = conn.getResponseCode();
+        }catch(Exception x){
+            Config.log(ERROR, "Failed to get response code from HTTP Server. Check your URL and username/password.",x);
+        }
+        
+        //read the response                
+        String response = readStream(responseCode == 200 ? conn.getInputStream() : conn.getErrorStream());        
+        if(response == null){
+            return null;
+        }
+        
+        Config.log(DEBUG, "Raw response from POST. Response Code = "+conn.getResponseCode()+" ("+conn.getResponseMessage()+"):\r\n"+ response);
+        return response.toString();
+    }
+    public static int getContentLength(String data) throws UnsupportedEncodingException{        
+        ByteArrayOutputStream sizeArray = new ByteArrayOutputStream();
+        PrintWriter sizeGetter = new PrintWriter(new OutputStreamWriter(sizeArray, "UTF-8" ));                
+        sizeGetter.write(data);
+        sizeGetter.flush();
+        sizeGetter.close();        
+        return sizeArray.size();        
+    }
+    public static String readStream(InputStream is) 
+    {
+        try
+        {
+            BufferedReader in = new BufferedReader(new InputStreamReader(is));
+            //return the raw data as a string
+            StringBuilder data = new StringBuilder();
+            while(true)
+            {
+                int i = in.read();
+                if(i == -1)break;
+                data.append( (char) i);//convert int to char
+            }    
+            return data.toString();
+        }
+        catch(IOException x){
+            Config.log(ERROR,"Failed to read stream: "+ x,x);
+            return null;
+        }
     }
 }

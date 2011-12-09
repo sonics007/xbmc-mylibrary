@@ -18,6 +18,9 @@ import java.util.regex.Pattern;
 
 public class XBMCFile implements Constants
 {
+    public static void main(String[]xxx){
+        System.out.println(new XBMCFile("Netflix-zXz-Instant Queue-zXz-Alphabetical-zXz-W-zXz-Wallace & Gromit in Three Amazing...-zXz-01: A Close Shave").stripExtras(" Gettysburg (HD)"));
+    }
     String fanart, file, fileLabel, thumbnail, parentPath, type, title, series, artist;
     int episodeNumber=-1, seasonNumber=-1, year=-1;
     String tvdbId;
@@ -240,7 +243,7 @@ public class XBMCFile implements Constants
     }
     public void setSeries(String series)
     {                
-        this.series = stripYear(series);
+        this.series = stripExtras(series);
     }
     
     public String getSeries()
@@ -249,7 +252,7 @@ public class XBMCFile implements Constants
     }
     public void setTitle(String title)
     {
-        this.title = stripYear(title);
+        this.title = stripExtras(title);
     }
     public String getTitle()
     {
@@ -376,7 +379,7 @@ public class XBMCFile implements Constants
         return parentPath;
     }
 
-    public String stripYear(String source)
+    public String stripExtras(String source)
     {
         if(!tools.valid(source)) return source;        
         source = source.trim();
@@ -396,6 +399,20 @@ public class XBMCFile implements Constants
                 break;
             }
         }
+        
+        //also strip (HD) labeling (commong from Hulu plugin)
+        if(source.toUpperCase().contains(" (HD)"))
+            source = source.replace(" (HD)", "").replace(" (hd)", "");//remove hd labeling if it exists
         return source;
+    }
+    
+    public boolean isWithinLimits(Subfolder subf){
+        boolean withinLimits = true;//default for non-tv types
+        if(isTvShow())
+        {
+            //check series limit
+            withinLimits = subf.canAddAnotherSeries(getSeries());
+        }        
+        return withinLimits;
     }
 }

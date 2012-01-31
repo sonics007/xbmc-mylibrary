@@ -1,5 +1,9 @@
 package utilities;
 
+import db.ArchivedFilesDB;
+import db.Database;
+import db.QueuedChangesDB;
+import db.ScraperDB;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -14,11 +18,19 @@ import org.jdom.input.SAXBuilder;
 public class Config implements Constants
 {
     public static boolean RESTART_XBMC = false;
-    public static Map<String, CompressionDefinition> COMPRESSION_DEFINITIONS = new LinkedHashMap<String, CompressionDefinition>();
+    
+    
+    
+    
+    /*
+     * Downloading support has been removed
+     * 
     public static boolean COMSKIP_DOWNLOADED_VIDEOS = false;
-    public static int EDL_TYPE = 0;
     public static String JDOWNLOADER_HOST = "http://localhost:10025";
     public static String DOWNLOADED_VIDEOS_DROPBOX = "\\\\localhost\\c$\\dropbox\\Downloaded";
+    public static int EDL_TYPE = 0;
+    public static Map<String, CompressionDefinition> COMPRESSION_DEFINITIONS = new LinkedHashMap<String, CompressionDefinition>();
+    */
     
     //the writers for the current and historical log files
     public static ServerSocket SINGLE_INSTANCE_SOCKET = null;
@@ -36,7 +48,11 @@ public class Config implements Constants
     
     public static List<String> XBMC_THUMBNAILS_FOLDERS = new ArrayList<String>();;
     public static final String[] KNOWN_XBMC_THUMBNAIL_EXTENSIONS = {".tbn", ".dds"};
-    public static Database archivedFilesDB, queuedChangesDB, scraperDB;//tracker SQLite DB's
+    
+    //tracker SQLite DB's
+    public static ArchivedFilesDB archivedFilesDB;
+    public static QueuedChangesDB queuedChangesDB;
+    public static ScraperDB scraperDB;
     
     public static boolean MANUAL_ARCHIVING_ENABLED = true;
     public static double HOURS_OLD_BEFORE_MANUAL_ARCHIVE = 6.0;
@@ -95,6 +111,7 @@ public class Config implements Constants
     public static String TEXTURE_AND_OR_FOR_THRESHOLD = "and";
     public static int TEXTURE_USE_COUNT_THRESHOLD = 2;
     public static boolean CONFIRM_PATHS_EXIST = true;//todo: add to config
+    public static boolean CLEAN_TEXTURES = false;
 
     public static int SPOT_CHECK_MAX_IMAGES = 150;
     public static String SPOT_CHECK_DIR;
@@ -268,23 +285,25 @@ public class Config implements Constants
         
 
          //thumbnail dir
-        Element thumbnailDir = root.getChild("ThumbnailDir");
-        if(thumbnailDir != null)
+        if(IS_THUMB_CLEANER)
         {
-            XBMC_THUMBNAILS_FOLDERS = new ArrayList<String>();//this is a list because it was thought of possible having multiple thumb dirs. TODO: review if this is necessary
-            String strFolder = thumbnailDir.getText();
-            if(strFolder.endsWith("/")||strFolder.endsWith("\\")) strFolder = strFolder.substring(0, strFolder.length()-1);//trim traling slash
-            XBMC_THUMBNAILS_FOLDERS.add(strFolder);
-            log(DEBUG, "XBMC Thumbnail dir = "+ XBMC_THUMBNAILS_FOLDERS.get(0));
+            Element thumbnailDir = root.getChild("ThumbnailDir");
+            if(thumbnailDir != null)
+            {
+                XBMC_THUMBNAILS_FOLDERS = new ArrayList<String>();//this is a list because it was thought of possible having multiple thumb dirs. TODO: review if this is necessary
+                String strFolder = thumbnailDir.getText();
+                if(strFolder.endsWith("/")||strFolder.endsWith("\\")) strFolder = strFolder.substring(0, strFolder.length()-1);//trim traling slash
+                XBMC_THUMBNAILS_FOLDERS.add(strFolder);
+                log(DEBUG, "XBMC Thumbnail dir = "+ XBMC_THUMBNAILS_FOLDERS.get(0));
+            }
+            else
+            {
+                log(ERROR, "No <ThumbnailDir> element found, cannot continue.");
+                return false;
+            }
         }
-        else
-        {
-            log(ERROR, "No <ThumbnailDir> element found, cannot continue.");
-            return false;
-        }
-
+        
         //Database (MySQL or SQLite)
-
         Element databaseElem = root.getChild("XBMCDatabase");
         if(databaseElem != null)
         {
@@ -471,16 +490,22 @@ public class Config implements Constants
             String downloadedDropbox = dropboxElem.getChildText("downloaded");
             if(!valid(downloadedDropbox))
             {
-                log(ERROR, "Downloaded Dropbox was not found in Config.xml. Please verify your <downloaded> element is filled in. Cannot contine until this is fixed.");
-                return false;
+                //this is expected now that downloading support has been removed
+                //log(ERROR, "Downloaded Dropbox was not found in Config.xml. Please verify your <downloaded> element is filled in. Cannot contine until this is fixed.");
+                //return false;
             }
-            if(downloadedDropbox.endsWith("/") || downloadedDropbox.endsWith("\\")) downloadedDropbox = downloadedDropbox.substring(0, downloadedDropbox.length()-1);//trim trailing slash
-            DOWNLOADED_VIDEOS_DROPBOX = downloadedDropbox;
-            //create the dropbox if it doesnt exist
-            File db2 = new File(DOWNLOADED_VIDEOS_DROPBOX);
-            if(!db2.exists())db2.mkdir();
-            log(DEBUG, "Download Dropbox = "+ DOWNLOADED_VIDEOS_DROPBOX);
-            
+            else
+            {
+                log(WARNING, "Downloading is not longer supported for this program. Nothing will be downloaded to: "+ downloadedDropbox);
+                /*
+                if(downloadedDropbox.endsWith("/") || downloadedDropbox.endsWith("\\")) downloadedDropbox = downloadedDropbox.substring(0, downloadedDropbox.length()-1);//trim trailing slash
+                DOWNLOADED_VIDEOS_DROPBOX = downloadedDropbox;
+                //create the dropbox if it doesnt exist
+                File db2 = new File(DOWNLOADED_VIDEOS_DROPBOX);
+                if(!db2.exists())db2.mkdir();
+                log(DEBUG, "Download Dropbox = "+ DOWNLOADED_VIDEOS_DROPBOX);                 
+                 */
+            }
 
             //TVDB api key
             TVDB_API_KEY = "05EB6802977A1FFE";//my key
@@ -572,6 +597,7 @@ public class Config implements Constants
                 Config.log(DEBUG, "PreScrapeMusicVids enabled = "+ SCRAPE_MUSIC_VIDEOS);
             }
 
+            /*
             Element jdownloaderElem = root.getChild("JDownloader");
             String jdHost = null;
             if(jdownloaderElem != null)
@@ -593,7 +619,8 @@ public class Config implements Constants
                 if(tools.isInt(comskipElem.getAttributeValue("type")))
                     EDL_TYPE = Integer.parseInt(comskipElem.getAttributeValue("type"));
                 log(DEBUG, "Comskip edl type set to: "+ EDL_TYPE);
-            }
+            }             
+            */
 
             
             //get SearchFilters
@@ -675,7 +702,12 @@ public class Config implements Constants
                         boolean regexName = "true".equalsIgnoreCase(inherit("regex_name", sourceElement, subfolder));
                         boolean recursive = "true".equalsIgnoreCase(inherit("recursive", sourceElement, subfolder));
                         boolean forceTVDB = "true".equalsIgnoreCase(inherit("force_tvdb", sourceElement, subfolder));
+                        
+                        //Download support has been removed, notify user if they still are requesting it
                         boolean download = "true".equalsIgnoreCase(inherit("download", sourceElement, subfolder));
+                        if(download)
+                            log(WARNING, "Found download attribute set to true, but downloading is no longer support. Nothing will be downloaded, but it will still be streamed.");
+                        
                         boolean containsMultiPartVideos = "true".equalsIgnoreCase(inherit("multi_part", sourceElement, subfolder));
                         String type = (inherit("type", sourceElement, subfolder));
                         String strMaxSeries = (inherit("max_series", sourceElement, subfolder));
@@ -686,7 +718,7 @@ public class Config implements Constants
                         String prefix = (inherit("prefix", sourceElement, subfolder));
                         String suffix = (inherit("suffix", sourceElement, subfolder));
                         int level_deep = Integer.parseInt(subfolder.getAttributeValue("level_deep"));
-                        String compression = (inherit("compression", sourceElement, subfolder));
+                        //String compression = (inherit("compression", sourceElement, subfolder));
 
                         Subfolder subf = new Subfolder(src, subfolderName);
                         subf.setRecursive(recursive);
@@ -699,15 +731,17 @@ public class Config implements Constants
                         subf.setPrefix(prefix);
                         subf.setSuffix(suffix);
                         subf.setCanContainMultiPartVideos(containsMultiPartVideos);
-                        subf.setDownload(download);
+                        //subf.setDownload(download);
                         subf.setLevelDeep(level_deep);
-                        subf.setCompression(compression);
+                        //subf.setCompression(compression);
 
                         String indent = "";
                         for(int i=subf.getLevelDeep(); i>=0; i--)indent+="\t";
                             
-                        Config.log(INFO, indent+"Next Subfolder: name="+subf.getFullName()+", recursive="+subf.isRecursive()+", type="+subf.getType()+", max_series="+subf.getMaxSeries()+", "
-                                + "max_videos="+subf.getMaxVideos()+", movie_set="+subf.getMovieSet()+", prefix="+subf.getPrefix()+", suffix="+subf.getSuffix()+", download="+download+", compression="+(valid(compression) ? compression:"")+", multi_part="+containsMultiPartVideos);
+                        Config.log(INFO, indent+"Next Subfolder: name="+subf.getFullName()+", recursive="+subf.isRecursive()
+                                +", type="+subf.getType()+", max_series="+subf.getMaxSeries()+", "
+                                + "max_videos="+subf.getMaxVideos()+", movie_set="+subf.getMovieSet()+", prefix="+subf.getPrefix()+", suffix="+subf.getSuffix()+
+                                /*", download="+download+", compression="+(valid(compression) ? compression:"")+*/", multi_part="+containsMultiPartVideos);
 
                         //check for excludes/filters at the subfolder level
                         //inherit any excludes/filters from parent subfolders
@@ -759,8 +793,13 @@ public class Config implements Constants
                 }
             }
 
-            //compression definitions
             Element compressionElem = root.getChild("Compression");
+            if(compressionElem != null)
+                log(WARNING, "Compression definitions found, but will be ignored because downloading is no longer supported.");
+            
+            /*
+             * Not needed since downloaded isnt supported
+            //compression definitions            
             List<Element> defs = compressionElem.getChildren();
             for(Element def : defs)
             {
@@ -795,6 +834,7 @@ public class Config implements Constants
                     log(WARNING, "No <VerificationLines> exists for the compression definition \""+name+"\". Cannot use this definition.");
                     continue;
                 }
+                
                 CompressionDefinition cd = new CompressionDefinition(name, command, encodeTo, verificationLines);
                 if(COMPRESSION_DEFINITIONS.get(cd.getName().toLowerCase()) != null)
                 {
@@ -802,8 +842,10 @@ public class Config implements Constants
                     continue;
                 }
                 COMPRESSION_DEFINITIONS.put(cd.getName().toLowerCase(), cd);
-                log(DEBUG, "Added compression definition named \""+name+"\" with encode_to = "+ encodeTo +", command = "+ command);
+                log(DEBUG, "Added compression definition named \""+name+"\" with encode_to = "+ encodeTo +", command = "+ command);                 
+                 
             }
+            * */             
         }//end if IS_MY_LIBRARY
 
         //specific config for thumb cleaner
@@ -853,6 +895,10 @@ public class Config implements Constants
                 Element texturesElem = root.getChild("XBMCTextures");
                 if(texturesElem == null) throw new Exception("No <XBMCTexturesDB> elem found.");
 
+                //enable/disable
+                CLEAN_TEXTURES = "true".equalsIgnoreCase(texturesElem.getAttributeValue("cleanup"));
+                if(CLEAN_TEXTURES)
+                {
                 //db path
                 Element textureDBPathElem = texturesElem.getChild("TextureDBPath");
                 if(textureDBPathElem == null) throw new Exception("No <TextureDBPath> found.");
@@ -882,7 +928,9 @@ public class Config implements Constants
                 try{TEXTURE_USE_COUNT_THRESHOLD = Integer.parseInt(useCountThresholdElem.getText());}
                 catch(Exception x){log(WARNING, "Could not find vaild number for <UseCountThreshold>, defaulting to: "+ TEXTURE_USE_COUNT_THRESHOLD);}
                 log(INFO, "Texture use count threshold = "+ TEXTURE_USE_COUNT_THRESHOLD +". Textures that have been used less than "+ TEXTURE_USE_COUNT_THRESHOLD +" times will be deleted.");
-
+                }
+                else
+                    log(INFO, "Texture cleanup is disabled because the cleanup attribute is not set to true, skipping...");
             }
             catch(Exception x)
             {
@@ -917,12 +965,12 @@ public class Config implements Constants
         //Archived Files tracker database
         final String archivedFilesDbLocation = BASE_PROGRAM_DIR+SEP+"res"+SEP+"ArchivedFiles.db";                
         Config.log(INFO, "Initializing SQLite database at: "+ archivedFilesDbLocation);
-        archivedFilesDB = new Database(SQL_LITE, archivedFilesDbLocation, null, null, null, -1);
+        archivedFilesDB = new ArchivedFilesDB(archivedFilesDbLocation);
         //create the db table if it doesnt exist
         try
         {
             String tableName = "ArchivedFiles";            
-            archivedFilesDB.getStatement().executeUpdate(
+            archivedFilesDB.executeSingleUpdate(
                     "CREATE TABLE IF NOT EXISTS "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "                    
                     + "source_name NOT NULL, "
                     + "dropbox_location NOT NULL, "
@@ -930,11 +978,10 @@ public class Config implements Constants
                     + "date_archived TIMESTAMP NOT NULL, "
                     + "missing_since TIMESTAMP, "
                     + "missing_count INTEGER"
-            + ")");
+            + ")",null);
             archivedFilesDB.closeStatement();
 
-            archivedFilesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_dropbox_location ON "+tableName+" (dropbox_location)");
-            archivedFilesDB.closeStatement();
+            archivedFilesDB.executeSingleUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_dropbox_location ON "+tableName+" (dropbox_location)",null);            
             
             /*additional changes since initial realease*/
             String[] varcharColumns = new String[] {"video_type", "title", "series", "artist"};//varchar columns
@@ -942,8 +989,7 @@ public class Config implements Constants
             {
                 if(!archivedFilesDB.hasColumn(tableName, columnName))
                 {
-                    archivedFilesDB.getStatement().executeUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" DEFAULT NULL");
-                    archivedFilesDB.closeStatement();
+                    archivedFilesDB.executeSingleUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" DEFAULT NULL",null);                    
                 }
             }
             
@@ -952,11 +998,11 @@ public class Config implements Constants
             {
                 if(!archivedFilesDB.hasColumn(tableName, columnName))
                 {
-                    archivedFilesDB.getStatement().executeUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" INTEGER DEFAULT NULL");
-                    archivedFilesDB.closeStatement();
+                    archivedFilesDB.executeSingleUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" INTEGER DEFAULT NULL",null);                    
                 }
             }
 
+        /*Downloading support has been removed
             //download tables
             tableName = "Downloads";
             archivedFilesDB.getStatement().executeUpdate(
@@ -966,9 +1012,10 @@ public class Config implements Constants
                     + "status NOT NULL,"
                     + "dest_no_ext NOT NULL"
             + ")");
-            archivedFilesDB.closeStatement();
+            archivedFilesDB.closeStatement();             
+             
 
-            /*additional changes since initial realease for Downloads table*/
+            //additional changes since initial realease for Downloads table
             varcharColumns = new String[] {"compression"};//varchar columns
             for(String columnName : varcharColumns)
             if(!archivedFilesDB.hasColumn(tableName, columnName))
@@ -993,7 +1040,7 @@ public class Config implements Constants
             archivedFilesDB.closeStatement();
             archivedFilesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_download_file ON "+tableName+" (download_id, file)");
             archivedFilesDB.closeStatement();
-
+             
             
             //EDLChanges
             tableName = "EDLChanges";
@@ -1004,7 +1051,8 @@ public class Config implements Constants
             + ")");
             archivedFilesDB.closeStatement();
             archivedFilesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_edl_file ON "+tableName+" (file)");
-            archivedFilesDB.closeStatement();            
+            archivedFilesDB.closeStatement();                         
+         */
 
         }
         catch(Exception x)
@@ -1020,21 +1068,19 @@ public class Config implements Constants
         //Queued Meta Data Changes tracker database
         final String queuedMetaDataChangesLocation = BASE_PROGRAM_DIR+SEP+"res"+SEP+"QueuedMetaDataChanges.db";
         Config.log(INFO, "Initializing SQLite database at: "+ queuedMetaDataChangesLocation);
-        queuedChangesDB = new Database(SQL_LITE, queuedMetaDataChangesLocation, null, null, null, -1);
+        queuedChangesDB = new QueuedChangesDB(queuedMetaDataChangesLocation);
         //create the db table if it doesnt exist
         try
         {
             final String tableName = "QueuedChanges";                        
             //stmt.executeUpdate("drop table if exists "+tableName);
-            queuedChangesDB.getStatement().executeUpdate("create table if not exists "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
+            queuedChangesDB.executeSingleUpdate("CREATE table if not exists "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
                     + "dropbox_location NOT NULL, "
                     + "video_type NOT NULL, "
                     + "meta_data_type NOT NULL, "
                     + "value NOT NULL, "
-                    + "status NOT NULL)");
-            queuedChangesDB.closeStatement();
-            queuedChangesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_queued_change ON QueuedChanges (dropbox_location, meta_data_type)");
-            queuedChangesDB.closeStatement();
+                    + "status NOT NULL)",null);            
+            queuedChangesDB.executeSingleUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_queued_change ON QueuedChanges (dropbox_location, meta_data_type)",null);            
         }
         catch(Exception x)
         {
@@ -1049,19 +1095,17 @@ public class Config implements Constants
         //scraper query database
         final String scraperDBLocation = BASE_PROGRAM_DIR+SEP+"res"+SEP+"scraper.db";
         Config.log(INFO, "Initializing SQLite database at: "+ scraperDBLocation);
-        scraperDB = new Database(SQL_LITE, scraperDBLocation, null, null, null, -1);
+        scraperDB = new ScraperDB(scraperDBLocation);
         //create the db table if it doesnt exist
         try
         {
             final String tableName = "APIQueries";
 
             //stmt.executeUpdate("drop table if exists "+tableName);
-            scraperDB.getStatement().executeUpdate("create table if not exists "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
+            scraperDB.executeSingleUpdate("create table if not exists "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
                     + "api_name NOT NULL, "
                     + "query_url NOT NULL, "
-                    + "query_time TIMESTAMP NOT NULL)");
-            scraperDB.closeStatement();
-                        
+                    + "query_time TIMESTAMP NOT NULL)",null);                                    
         }
         catch(Exception x)
         {
@@ -1369,13 +1413,12 @@ public class Config implements Constants
     
     public static void end()
     {
-        try{if(SINGLE_INSTANCE_SOCKET != null) SINGLE_INSTANCE_SOCKET.close();}catch(Exception x){Config.log(WARNING, "Failed to close single instance socket...",x);}finally{SINGLE_INSTANCE_SOCKET=null;}
+        try{if(SINGLE_INSTANCE_SOCKET != null) SINGLE_INSTANCE_SOCKET.close();}
+        catch(Exception x){Config.log(WARNING, "Failed to close single instance socket...",x);}
+        finally{SINGLE_INSTANCE_SOCKET=null;}
         if(logger != null)logger.canStop();        
         if(queuedChangesDB != null)queuedChangesDB.close();
         if(archivedFilesDB != null)archivedFilesDB.close();
-        if(scraperDB != null)scraperDB.close();
-        
-        
-        
+        if(scraperDB != null)scraperDB.close();                        
     }
 }

@@ -72,7 +72,7 @@ public class XbmcJsonRpc implements Runnable, Constants
             
             if(includeExtras)
             {
-                Config.log(INFO, "Searching for movie sets");
+                Config.log(DEBUG, "Searching for movie sets");
                 //check for movie sets (considered directories for our purposes
                 params.clear();
                 params.put("properties", new String[]{"title","fanart","thumbnail"});                
@@ -417,6 +417,16 @@ public class XbmcJsonRpc implements Runnable, Constants
         
         final String mediaType = "files";//files should return everything after fix here: http://forum.xbmc.org/showthread.php?t=114921
         params.put("media", mediaType);        
+        
+        /*Sort testing
+         * 
+        boolean sort = true;
+        String sortOrder = "descending";
+        if(sort)
+        {
+            params.put("sort","{\"method\":\"label\", \"order\": \""+sortOrder+"\"}");
+        }
+        */
         
         //PRINT_JSON=true;
         JSONObject jsonGetDirectory = callMethod("Files.GetDirectory", 1, params);                          

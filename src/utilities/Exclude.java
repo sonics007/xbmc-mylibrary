@@ -55,7 +55,7 @@ public class Exclude
                     Pattern p = Pattern.compile(excludeString, Pattern.CASE_INSENSITIVE);
                     Matcher m = p.matcher(path);
                     boolean match = m.find();
-                    Config.log(Config.DEBUG, "Exclude ? "+ match +" \""+path+"\" "+(!match ? "does not match" : "matchs")+" regexp \""+excludeString+"\"");
+                    //Config.log(Config.DEBUG, "Exclude ? "+ match +" \""+path+"\" "+(!match ? "does not match" : "matchs")+" regexp \""+excludeString+"\"");
                     if(match)
                     {
                         return true;//path matches this regex
@@ -65,7 +65,7 @@ public class Exclude
                 {
 
                     boolean match = path.toLowerCase().contains(excludeString.toLowerCase());
-                    Config.log(Config.DEBUG, "Exclude ? "+ match +" \""+path+"\" "+(!match ? "does not contain" : "contains")+"  \""+excludeString+"\"");
+                    //Config.log(Config.DEBUG, "Exclude ? "+ match +" \""+path+"\" "+(!match ? "does not contain" : "contains")+"  \""+excludeString+"\"");
                     if(match)
                         return true;//path contains this string
                 }

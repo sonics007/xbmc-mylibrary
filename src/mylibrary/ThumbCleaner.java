@@ -1,5 +1,7 @@
 package mylibrary;
 
+import db.Database;
+import db.TexturesDB;
 import java.sql.*;
 import java.util.*;
 import java.net.*;
@@ -76,7 +78,8 @@ public class ThumbCleaner extends Config implements Constants
             if(thumbDir.isDirectory())
             {
                 cleanLibraryThumbsAndFanart();
-                cleanTextures();
+                if(CLEAN_TEXTURES) cleanTextures();
+                setShortLogDesc("CleanSummary");
                 log(NOTICE, "Total files "+(SIMULATION ? "SIMLUATED" :"")+" deleted = "+ (thumbsDeletedCount+texturesDeletedCount) +" images totaling "+ ((thumbDeleteSizeKB+textureDeleteSizeKB)/1024) +" MB");
                 logFileExpiration();
                 setShortLogDesc("Exit");
@@ -88,7 +91,7 @@ public class ThumbCleaner extends Config implements Constants
         }
         catch(Exception x)
         {
-            Config.log(INFO, "General exception: "+ x,x);
+            Config.log(ERROR, "General exception: "+ x,x);
             end();
             System.exit(1);
         }        
@@ -119,7 +122,7 @@ public class ThumbCleaner extends Config implements Constants
             return;
         }        
         
-        dbTextures = new Database(SQL_LITE, sqlLiteTexturesDBPath, null, null, null, -1);
+        dbTextures = new TexturesDB(sqlLiteTexturesDBPath);
         if(dbTextures.isConnected()) Config.log(Config.INFO, "Connection to Textures database \""+sqlLiteTexturesDBPath+"\" was successful");
         else
         {
@@ -136,7 +139,7 @@ public class ThumbCleaner extends Config implements Constants
         Set<String> validTextureHashs = new HashSet<String>();//store the crc's from valid textures
         try
         {                        
-            ResultSet rs = dbTextures.getStatement().executeQuery(sql);
+            ResultSet rs = dbTextures.executeQuery(sql,null);
             
             int deleteCount = 0, totalTextureCount=0, validCount=0, failCount=0;
             final long NOW = System.currentTimeMillis();
@@ -300,7 +303,8 @@ public class ThumbCleaner extends Config implements Constants
             else if(alreadyDeletedFromDatabase) deletedFromDB=true;
             else
             {
-                int deleteCount  = dbTextures.executeMultipleUpdate("DELETE FROM texture WHERE cachedurl like '%" + hash + "%'");
+                int deleteCount  = dbTextures.executeMultipleUpdate("DELETE FROM texture WHERE cachedurl LIKE ?",tools.params("%" + hash + "%"));
+                
                 if(deleteCount>0) log(DEBUG, "Successfully deleted "+ deleteCount +" row(s) from database for hash "+ hash);
                 else if(deleteCount == 0) log(DEBUG, "The hash "+ hash +" was not found in textures.db. It does not need to be deleted from the database.");
                 deletedFromDB = deleteCount >= 0;//as long as it's not a SQL error (negative), it's OK, even if its zero
@@ -372,7 +376,7 @@ public class ThumbCleaner extends Config implements Constants
          * START VIDEO SECTION
          */
 
-        setShortLogDesc(DATABASE_TYPE+":VideoLibrary");
+        setShortLogDesc(DATABASE_TYPE+":VideoLib");
         //movies
         Config.log(INFO, "Generating CRC hashs from Movies");
         for(String fullFilePath : getMovies())
@@ -444,7 +448,7 @@ public class ThumbCleaner extends Config implements Constants
         /*
          * START MUSIC SECTION
          */        
-        setShortLogDesc(DATABASE_TYPE+":MusicLibrary");
+        setShortLogDesc(DATABASE_TYPE+":MusicLib");
         //Artists
         Config.log(INFO, "Generating CRC hashs from Artists");
         for(String artistName : getArtists())
@@ -646,7 +650,7 @@ public class ThumbCleaner extends Config implements Constants
         if(SIMULATION)
         {
             setShortLogDesc("Simulation");
-            Config.log(INFO, "Since this is a simulation, no thumbs/fanart are being deleted...");
+            Config.log(NOTICE, "Since this is a simulation, no thumbs/fanart are being deleted...");
             spotCheck("VideoAudio Thumbs and Fanart", invalidThumbs, SPOT_CHECK_MAX_IMAGES);
             setShortLogDesc("Simulation");
         }
@@ -726,6 +730,7 @@ public class ThumbCleaner extends Config implements Constants
         int lastSlash = fullPath.lastIndexOf("/");
         if(lastDot == -1 || lastSlash == -1 || lastDot <= lastSlash) return null;//malformed
         String hash = fullPath.substring(lastSlash+1, lastDot);
+        if(hash.startsWith("auto-")) return null;//we want to delete all auto-xxxxxx hash's because they're automatically re-generated
         if(isValidHash(hash))
             return hash.toLowerCase().trim();
         else
@@ -856,13 +861,13 @@ public class ThumbCleaner extends Config implements Constants
     public List<String> getMovies()
     {
         String sql = "SELECT "+CONCAT+"(strPath, strFileName) FROM movieview";
-        return getList(sql, dbVideo);
+        return getList(sql, dbVideo,null);
     }
     
     public List<String> getMoviePaths()//catches if "use foldername for lookup" is used
     {
         String sql = "SELECT distinct(strPath) FROM movieview";
-        List<String> paths = getList(sql,dbVideo);
+        List<String> paths = getList(sql,dbVideo,null);
         List<String> pathsWithFolderImages = new ArrayList<String>();
         for(String path : paths)
         {
@@ -875,27 +880,27 @@ public class ThumbCleaner extends Config implements Constants
      public List<String> getEpisodes()
     {
         String sql = "SELECT "+CONCAT+"(strPath, strFileName) FROM episodeview";
-        return getList(sql, dbVideo);
+        return getList(sql, dbVideo,null);
     }
     private Collection<String> getTVShowPaths()
     {
         String sql = "SELECT strPath FROM path WHERE idPath in (SELECT idPath FROM tvshowlinkpath)";
-        return getList(sql, dbVideo);
+        return getList(sql, dbVideo,null);
     }
     private List<String> getMusicVideos()
     {
         String sql = "SELECT "+CONCAT+"(strPath, strFileName) FROM musicvideoview";
-        return getList(sql,dbVideo);
+        return getList(sql,dbVideo,null);
     }
     public List<String> getActors()
     {
         String sql = "SELECT strActor FROM actors";
-        return getList(sql,dbVideo);
+        return getList(sql,dbVideo,null);
     }
     public List<String> getArtists()
     {
         String sql = "SELECT strArtist FROM artist";
-        List<String> artistsNames = getList(sql,dbMusic);
+        List<String> artistsNames = getList(sql,dbMusic,null);
         List<String> artists = new ArrayList<String>();
         for(String name : artistsNames)
             artists.add("artist"+name);//artist must be prepended for thumb
@@ -906,12 +911,12 @@ public class ThumbCleaner extends Config implements Constants
     public List<String> getAlbumArtist()
     {
         String sql = "SELECT "+CONCAT+"(strAlbum, strArtist) FROM albumview";
-        return getList(sql,dbMusic);
+        return getList(sql,dbMusic,null);
     }
     public List<String> getSongFolderPaths()
     {
         String sql = "SELECT strPath FROM path";        
-        List<String> paths = getList(sql,dbMusic);
+        List<String> paths = getList(sql,dbMusic,null);
         List<String> pathsWithFolderImages = new ArrayList<String>();
         for(String path :paths)
         {
@@ -924,12 +929,12 @@ public class ThumbCleaner extends Config implements Constants
     public List<String> getSongFilePaths()
     {
         String sql = "SELECT "+CONCAT+"(strPath, strFilename) FROM songview";
-        return getList(sql,dbMusic);
+        return getList(sql,dbMusic,null);
     }
     public void addAlbumHashsFromDB()
     {
         String sql = "SELECT "+CONCAT+"(strAlbum, strArtist) as albumArtist, strThumb FROM albumview";
-        Map<String,String> hashMap =  getMap(sql,dbMusic);
+        Map<String,String> hashMap =  getMap(sql,dbMusic,null);
         for(Map.Entry<String,String> entry : hashMap.entrySet())
         {
             String albumArtist = entry.getKey();
@@ -977,14 +982,14 @@ public class ThumbCleaner extends Config implements Constants
     /*
      * Return a string list from the query. Only the first field is added to the list.
      */
-    public List<String> getList(String sql, Database db)
+    public List<String> getList(String sql, Database db, List<Param> params)
     {
         if(db.isSQLite()) sql = convertToSQLLite(sql);
         try
         {
             List<String> list = new ArrayList<String>();            
             Config.log(DEBUG, "Executing SQL: "+ sql);
-            ResultSet rs = db.getStatement().executeQuery(sql);
+            ResultSet rs = db.executeQuery(sql,params);
             while(rs.next())
             {
                 String s = rs.getString(1);
@@ -1013,14 +1018,14 @@ public class ThumbCleaner extends Config implements Constants
      /*
      * Return a map from the query. The first field is the key, the second field is the value.
      */
-    public Map<String,String> getMap(String sql, Database db)
+    public Map<String,String> getMap(String sql, Database db, List<Param> params)
     {
         if(db.isSQLite()) sql = convertToSQLLite(sql);
         try
         {
             Map<String,String> list = new LinkedHashMap<String,String>();            
             Config.log(DEBUG, "Executing SQL: "+ sql);
-            ResultSet rs = db.getStatement().executeQuery(sql);
+            ResultSet rs = db.executeQuery(sql,params);
             while(rs.next())
             {
                 String s1 = rs.getString(1);

@@ -1,7 +1,10 @@
-package utilities;
+package db;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import utilities.Config;
+import utilities.Constants;
+import utilities.Param;
 
 public class Database implements Constants
 {    
@@ -13,6 +16,10 @@ public class Database implements Constants
     String MYSQL_UN, MYSQL_PW, DATABASE_NAME, SQL_SERVER;
     boolean isMySQL, isSQLite;
 
+    public Database(String type, String dbPath)
+    {//sqlite constructor only needs db path
+        this(type,dbPath,null,null,null,-1);
+    }
     public Database(String type, String schemaOrDBPath, String host, String un, String pw, int port)
     {
         try
@@ -57,20 +64,23 @@ public class Database implements Constants
             Config.log(ERROR,"Cannot determine if Database is connected: "+x,x);
             return false;
         }
-    }
-
-    /*
-    public Connection getConnection()
-    {     
-        return conn;
-    }
-     * */
+    }    
      
 
     private void setSQLLiteConnection()
-    {
-        SQLLiteConnection sqlLiteConn = new SQLLiteConnection(DATABASE_NAME);
-        conn = sqlLiteConn.getConnection();
+    {        
+        String connectionPath = "jdbc:sqlite:"+DATABASE_NAME;
+        try
+        {
+            Class.forName("org.sqlite.JDBC");//initialize the class
+            conn = DriverManager.getConnection(connectionPath);
+            if(conn == null) throw new Exception("No connection...");            
+        }
+        catch(Exception x)
+        {            
+            Config.log(ERROR,"Failed to get SQL Lite DB Connection to : "+ connectionPath,x);
+            conn = null;
+        }                
     }
 
     private void setMySQLConnection()
@@ -90,15 +100,12 @@ public class Database implements Constants
         }        
     }
 
-    private Statement stmt = null;//single statement allowed
+    private PreparedStatement prepared_statement = null;//single statement allowed
     private boolean statementAvail = true;//init
-    public synchronized Statement getStatement()
-    {
-        return getStatement(STATEMENT, null);//regular statement
-    }
     long getStatementStart=0;
-    public synchronized Statement getStatement(int type, String sql)
-    {               
+    public synchronized PreparedStatement getStatement(String preparedStmtSql)
+    {
+                                       
         final long sleepTime = 10;//check every x ms
         getStatementStart = System.currentTimeMillis();
         while(true)
@@ -112,18 +119,17 @@ public class Database implements Constants
             {
                 if(!statementAvail)//check if the statement has been released, but closeStatement was never called (i.e. an error occured)
                 {
-                    statementAvail = (stmt == null);
-                    if(!statementAvail) try{statementAvail = stmt.isClosed();}catch(Exception ignored){}
+                    statementAvail = (prepared_statement == null);
+                    if(!statementAvail) try{statementAvail = prepared_statement.isClosed();}catch(Exception ignored){}
                 }
             }
             
             if(statementAvail/* || isMySQL*/)//mysql can use concurrent statements, SQLite is limited to 1 at a time
             {
                 try
-                {
-                    if(type == STATEMENT) stmt = conn.createStatement();
-                    else if(type == PREPARED_STATEMENT) stmt = conn.prepareStatement(sql);
-                    return stmt;
+                {                    
+                    prepared_statement = conn.prepareStatement(preparedStmtSql);
+                    return prepared_statement;                                        
                 }
                 catch(Exception x)
                 {
@@ -144,28 +150,81 @@ public class Database implements Constants
     {        
         try
         {
-            if(stmt != null && !stmt.isClosed()) stmt.close();
-            stmt = null;
+            if(prepared_statement != null) prepared_statement.close();
+            prepared_statement = null;
         }
-        catch(Throwable t)
+        catch(Exception x)
         {
             //ignore if it fails to close
-            //Config.log(WARNING, "Failed to close statement properly. This may lead to DB inconsistencies...");
+            Config.log(WARNING, "Failed to close statement properly. This may lead to DB inconsistencies...",x);
         }
         finally
         {
             statementAvail = true;
         }
     }
+    
+    public void setParams(List<Param> params, PreparedStatement stmt)
+    {
+        if(params == null || params.isEmpty()){            
+            return;
+        }///nothign to set
+        int i = 1;
+        try
+        {
+            for(Param p : params)
+            {
+                switch(p.type)
+                {
+                    case INT:
+                        stmt.setInt(i, p.param == null ? null : ((Integer)p.param)); break;
+                    case STRING:
+                        stmt.setString(i, p.param == null ? null : ((String)p.param)); break;
+                    case DOUBLE:
+                        stmt.setDouble(i, p.param == null ? null : ((Double)p.param)); break;
+                    case TIMESTAMP:
+                        stmt.setTimestamp(i, p.param == null ? null : ((java.sql.Timestamp)p.param)); break;
+                    default: 
+                    {
+                        Config.log(ERROR, "Unknown param type: "+p.type+" for param: "+p.param+". Cannot set parameter");
+                        stmt.setObject(i, p.param);//nulls may not work here depending on database
+                    }
+                }
+                Config.log(DEBUG, "Set param "+ i +" to "+ p.param);
+                i++;
+            }
+        }
+        catch(Exception x)
+        {
+            Config.log(ERROR, "Failed to set parameters for PreparedStatement: "+ x,x);            
+        }
+    }
+    
+    public ResultSet executeQuery(String preparedStmtSql, List<Param> params)
+    {
+        PreparedStatement stmt = (PreparedStatement) getStatement(preparedStmtSql);
+        setParams(params, stmt);
+        try
+        {
+            return stmt.executeQuery();//must be closed externally
+        }
+        catch(Exception x)
+        {
+            Config.log(ERROR, "Failed to executeQuery for prepared statement: "+ x,x);
+            return null;
+        }
+    }
 
-    public synchronized List<String> getStringList(String sql)
+    public synchronized List<String> getStringList(String sql, List<Param> params)
     {
         ArrayList list = new ArrayList<String>();
         try
         {
-            ResultSet rs = getStatement().executeQuery(sql);
+            PreparedStatement stmt = (PreparedStatement) getStatement(sql);
+            setParams(params, stmt);
+            ResultSet rs = stmt.executeQuery();
             while(rs.next()) list.add(rs.getString(1));
-            rs.close();
+            rs.close();            
         }
         catch(Exception x)
         {
@@ -178,12 +237,14 @@ public class Database implements Constants
         return list;
     }
 
-    public synchronized String getSingleString(String sql)
+    public synchronized String getSingleString(String sql, List<Param> params)
     {
         String str = null;
         try
         {            
-            ResultSet rs = getStatement().executeQuery(sql);
+            PreparedStatement stmt = (PreparedStatement) getStatement(sql);
+            setParams(params, stmt);
+            ResultSet rs = stmt.executeQuery();
             if(rs.next()) str = rs.getString(1);
             rs.close();            
         }
@@ -197,12 +258,14 @@ public class Database implements Constants
         }
         return str;
     }
-    public synchronized int getSingleInt(String sql)
+    public synchronized int getSingleInt(String sql, List<Param> params)
     {
         int id = -1;//default is nothing if found from query
         try
-        {            
-            ResultSet rs = getStatement().executeQuery(sql);
+        {  
+            PreparedStatement stmt = (PreparedStatement) getStatement(sql);
+            setParams(params, stmt);
+            ResultSet rs = stmt.executeQuery();
             if(rs.next()) id = rs.getInt(1);
             rs.close();            
             return id;
@@ -218,12 +281,14 @@ public class Database implements Constants
         }
     }
     
-    public synchronized Long getSingleTimestamp(String sql)
+    public synchronized Long getSingleTimestamp(String sql, List<Param> params)
     {
         Long timestamp = null;//default null is nothing if found in sql query
         try
         {            
-            ResultSet rs = getStatement().executeQuery(sql);
+            PreparedStatement stmt = (PreparedStatement) getStatement(sql);
+            setParams(params, stmt);
+            ResultSet rs = stmt.executeQuery();
             if(rs.next())
             {
                 java.sql.Timestamp sqlTimestamp = rs.getTimestamp(1);
@@ -243,13 +308,15 @@ public class Database implements Constants
         return timestamp;
     }
 
-    public synchronized int executeMultipleUpdate(String sql)
+    public synchronized int executeMultipleUpdate(String sql, List<Param> params)
     {
         int rowsUpdated = 0;//dfault # rows updated
         try
         {
             //Config.log(Config.DEBUG, sql);
-            rowsUpdated = getStatement().executeUpdate(sql);
+            PreparedStatement stmt = (PreparedStatement) getStatement(sql);
+            setParams(params, stmt);
+            rowsUpdated = stmt.executeUpdate();
         }
         catch(Exception x)
         {
@@ -263,14 +330,15 @@ public class Database implements Constants
          return rowsUpdated;
     }
 
-    public synchronized boolean executeSingleUpdate(String sql)
+    public synchronized boolean executeSingleUpdate(String sql,List<Param> params)
     {
         boolean success = false;//dfault
         int rowsUpdated = 0;
         try
         {
-            //Config.log(Config.DEBUG, sql);
-            rowsUpdated = getStatement().executeUpdate(sql);
+            PreparedStatement stmt = (PreparedStatement) getStatement(sql);
+            setParams(params, stmt);
+            rowsUpdated = stmt.executeUpdate();
             if(rowsUpdated == 1)
             {
                 success = true;
@@ -289,35 +357,7 @@ public class Database implements Constants
         return success;
     }
 
-    public synchronized boolean hasColumn(String tablename, String columnName)
-    {
-        String sql = "PRAGMA table_info("+tablename+")";
-        boolean hasColumn = false;
-        try
-        {
-            ResultSet rs = getStatement().executeQuery(sql);
-            while(rs.next())
-            {
-                String nextColumnName = rs.getString("name");
-                if(nextColumnName.equalsIgnoreCase(columnName))
-                {
-                    hasColumn =true;
-                    break;
-                }
-            }
-            rs.close();
-            return hasColumn;
-        }
-        catch(Exception x)
-        {
-            Config.log(ERROR, "Failed to determine if table \""+tablename+"\" has column named \""+columnName+"\"",x);
-            return false;
-        }
-        finally
-        {
-            closeStatement();
-        }
-    }
+   
     public void close()
     {
         if(conn != null)

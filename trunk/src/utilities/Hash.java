@@ -1,16 +1,17 @@
 
 package utilities;
 
+
 public class Hash
 {
     public static void main(String [] args)
     {        
         //java.util.Formatter f = new java.util.Formattr();
-        //example string that needs leading zeroes added : "smb://ONYX/Data/compressed/TV Shows/Lost/Season.5/Lost.S05E04.The.Little.Prince.avi"
+        //example string that needs leading zeroes added : "smb://ONYX/Data/compressed/TV Shows/Lost/Season.5/Lost.S05E04.The.Little.Prince.avi"        
         System.out.println(Hash.generateCRC("stack://smb://localhost/c$/dropbox/Movies/The Hangover (2009).part1.wmv , smb://localhost/c$/dropbox/Movies/The Hangover (2009).part2.wmv"));
-        //06a0692e
-    }        
-
+        //06a0692e               
+    }              
+    
     public static String generateCRC(String source)
     {
        //convert to lowercase source for any chars under 128       
@@ -24,8 +25,7 @@ public class Hash
               //overwrite with lowercase char
               chars[index] = Character.toLowerCase(c);//convert the char to lowercase
            }           
-       }
-       
+       }       
 
        //convert to crc, using the lowercase string
        String lowerCaseSource = new String(chars);

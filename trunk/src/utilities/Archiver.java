@@ -153,7 +153,7 @@ public class Archiver implements Runnable, Constants
         log(NOTICE, "Movie Success: "+ movieSuccess+", Movie Fail: "+ movieFail);
         log(NOTICE, "Music Video Success: "+ musicVideoSuccess+", Music Video Fail: "+ musicVideoFail);
         log(NOTICE, "New videos archived: "+ newArchivedCount +", existing videos updated: "+ updatedCount);
-        log(NOTICE,"Overall: Success: "+ archiveSuccess+", Skip: "+ archiveSkip +", Fail: "+ archiveFail);
+        log(NOTICE, "Overall: Success: "+ archiveSuccess+", Skip: "+ archiveSkip +", Fail: "+ archiveFail);
         setShortLogDesc("");
 
         //track global counts
@@ -250,44 +250,29 @@ public class Archiver implements Runnable, Constants
             
 
             if(withinLimits)
-            {
-                boolean hasBeenDownloaded = isDownloaded(video);//skip it if it's already been downloaded to local
-                if(!hasBeenDownloaded)
+            {                                                
+                //check if this file has already been archived
+                boolean originalWasSkippedBecauseAlreadyArchived = video.isDuplicate() 
+                            && video.getOriginalVideo().skippedBecauseAlreadyArchived(); //this file is a duplicate, and the original was skipped becasue of already archived
+                
+                boolean alreadyArchived = originalWasSkippedBecauseAlreadyArchived //if the original was skipped, also skip dups
+                        || (!video.isDuplicate() && isAlreadyArchived(video));//not a duplicate, do the normal isAlreadyArchived check
+                if(!alreadyArchived)
                 {
-                    //check if this file has already been archived
-                    boolean originalWasSkippedBecauseAlreadyArchived = video.isDuplicate() && video.getOriginalVideo().skippedBecauseAlreadyArchived(); //this file is a duplicate, and the original was skipped becasue of already archived
-                    boolean alreadyArchived = originalWasSkippedBecauseAlreadyArchived //if the original was skipped, also skip dups
-                            || (!video.isDuplicate() && isAlreadyArchived(video));//not a duplicate, do the normal isAlreadyArchived check
-                    if(!alreadyArchived)
-                    {
-                        boolean archived = archiveFileInDropbox(video);                                                
-                        increaseArchiveCount(video,archived);//increases count (either success of fail) per video type and for overall count                        
-                    }
-                    else//already been archived
-                    {
-                        video.setSkippedBecauseAlreadyArchived(true);
-                        if(!video.isDuplicate())//only log the original skip
-                        {
-                            archiveSkip++;
-                            setShortLogDesc("Arvhive:Skip");
-                            log(DEBUG, "SKIP: Not archiving this video because it has already been archived by another source");
-                            setShortLogDesc("Archiving");
-                        }
-                    }
+                    boolean archived = archiveFileInDropbox(video);                                                
+                    increaseArchiveCount(video,archived);//increases count (either success of fail) per video type and for overall count                        
                 }
-                else//this video has been downloaded
+                else//already been archived
                 {
-                    //treat downloaded vidoes as successfully archived (updated) videos
-                    if(!video.isDuplicate())
+                    video.setSkippedBecauseAlreadyArchived(true);
+                    if(!video.isDuplicate())//only log the original skip
                     {
-                        increaseArchiveCount(video,true);
-                        setShortLogDesc("Arvhive:Downloaded");
-                        log(INFO, "DOWNLOADED: Not archiving this video as a .strm because it "
-                                + "has been downloaded locally: "+ video.getFullPathEscaped() 
-                                + " (at: "+ getDroboxDestNoExt(video)+".downloaded)");
+                        archiveSkip++;
+                        setShortLogDesc("Arvhive:Skip");
+                        log(DEBUG, "SKIP: Not archiving this video because it has already been archived by another source");
                         setShortLogDesc("Archiving");
                     }
-                }
+                }                                
             }
             else
             {
@@ -306,7 +291,7 @@ public class Archiver implements Runnable, Constants
         {
             archiveFail++;
             log(WARNING, "Cannot be archived: series="+video.getSeries()+", title="+video.getTitle()+", season="+video.getSeasonNumber()+", episode="+video.getEpisodeNumber()
-                    +"\n" + video.getFullPathEscaped());
+                    +LINE_BRK + video.getFullPathEscaped());
         }
 
         if(!subf.canContainMultiPartVideos() && !subf.canAddAnotherVideo())
@@ -487,19 +472,10 @@ public class Archiver implements Runnable, Constants
 
     public boolean archiveFileInDropbox(XBMCFile video)
     {
-        String destNoExt = getDroboxDestNoExt(video);
-        String extToSave;
-
+        final String destNoExt = getDroboxDestNoExt(video);
+        final String extToSave = ".strm";
+        final String fullFinalPath = destNoExt+extToSave;                        
         
-        //initially archive as .mpg to force XBMC to add it to its library. it will later be converted to a .strm once it's in the library
-        File strm = new File(destNoExt+".strm");
-        if(strm.exists())
-            extToSave = ".strm";//this file has already been converted from .mpg to .strm. Just need to update the .strm file now
-        else//this file has not yet been converted to a .strm, create/update the .mpg
-            extToSave = ".mpg";
-
-
-        String fullFinalPath = destNoExt+extToSave;
         video.setFinalLocation(fullFinalPath);
         File whereFile = new File(fullFinalPath);
         boolean updating = whereFile.exists();
@@ -507,7 +483,7 @@ public class Archiver implements Runnable, Constants
         boolean duplicateUpdate = video.isDuplicate() && updating;//for duplicates, allow updating the current file because this dup may will add another multi-part to the file
         boolean regularUpdate = !video.isDuplicate();
         boolean created;
-        if(regularUpdate || duplicateUpdate) created = tools.createInternetShortcut(whereFile, video.getFileList());//getFileList() will return multiple files for multi-part videos
+        if(regularUpdate || duplicateUpdate) created = tools.createStrmFile(whereFile, video.getFileList());//getFileList() will return multiple files for multi-part videos
         else
         {
             //we arecreating a new file from a duplicate. don't allow this, this means we have reached the max file limit, but this file was allowd to be processed because its a dup
@@ -545,7 +521,7 @@ public class Archiver implements Runnable, Constants
                 setShortLogDesc("Archive:New");
             }
             
-            log(updating ? INFO : INFO, (!updating ?"Archived" : "Updated") +" video at: "+ whereFile +" ("+video.getFullPathEscaped()+")");
+            log(INFO, (!updating ?"Archived" : "Updated") +" video at: "+ whereFile +" ("+video.getFullPathEscaped()+")");
             setShortLogDesc("Arvhiving");
             trackArchivedFiles(whereFile.getPath(), video);
 
@@ -668,20 +644,16 @@ public class Archiver implements Runnable, Constants
         }         
          */
                 
-        String dropboxFileLocation = tools.convertToStrm(file.getFinalLocation());//always stored as a .strm in the db
+        String dropboxFileLocation = file.getFinalLocation();
         boolean success = tools.addMetaDataChangeToDatabase(file, typeOfMetaData, value);
         if(!success)
             log(WARNING, "Could not queue meta-data change: type="+typeOfMetaData+", value="+value+", for file: "+dropboxFileLocation);
         else
             log(DEBUG, "Successfuly queued meta-data change for type="+typeOfMetaData+", value="+value+", for file: "+dropboxFileLocation);
     }
-
-    public boolean isDownloaded(XBMCFile file)
-    {
-        String destNoExt = getDroboxDestNoExt(file);
-        File dropboxLocation = new File(destNoExt+".downloaded");
-        return dropboxLocation.exists() && dropboxLocation.isFile();
-    }
+  
+    
+    Map<File,Collection<File>> episodesBySeasonDir = new HashMap<File,Collection<File>>();
     /*
      * Checks if the file has been already archived by ANY Archiver (not just the current one).
      */
@@ -690,51 +662,62 @@ public class Archiver implements Runnable, Constants
         //check if this final path for this video has already been archived in this run
         String destNoExt = getDroboxDestNoExt(file);
         File dropboxLocation = new File(destNoExt+".strm");
-        String videoThatWasAlreadyArchivedAtThisLocation = allFilesArchived.get(dropboxLocation);
-        if(videoThatWasAlreadyArchivedAtThisLocation == null)
-        {
-            dropboxLocation = new File(destNoExt+".mpg");
-            videoThatWasAlreadyArchivedAtThisLocation = allFilesArchived.get(dropboxLocation);
-        }
+        String videoThatWasAlreadyArchivedAtThisLocation = allFilesArchived.get(dropboxLocation);        
 
-        if(videoThatWasAlreadyArchivedAtThisLocation != null)
+        if(videoThatWasAlreadyArchivedAtThisLocation != null)//found it
         {
             //these videos must be tracked so we know not to delete them when cleaning dropbox
             allVideosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track globally
             videosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track fr this subfolder
+            setShortLogDesc("Archive:Duplicate");
             log(INFO, "This video ("+file.getFullPathEscaped()+") was already archived at \""+dropboxLocation+"\" by video from ("+Config.escapePath(videoThatWasAlreadyArchivedAtThisLocation)+")");
             return true;
-        }
-        else
-            return false;
-
-        /*
-         * Not using this because it was skipping episodes it shouldn't be, leading to un-updated files that won't play. TODO: review if needed
+        }                         
 
         //determine if a TV Show with same Season/Episode is already archived (with a different file name, which means it was archived from a different source)
         if(file.isTvShow())
         {
-            //look for SxxExx match
-            String SxxExx = file.getSeasonEpisodeNaming();
-            File dirInDropbox = new File(destNoExt+".tmp").getParentFile();
-
-            try
+            File seasonDir = dropboxLocation.getParentFile();
+            Collection<File> episodes = episodesBySeasonDir.get(seasonDir);
+            if(episodes == null)
             {
-                Collection<File> tvShows = FileUtils.listFiles(dirInDropbox, new String[] {"strm"}, true);//get all .strm TV Shows (recursive)
-                log(DEBUG, "Checking "+ tvShows.size() +" .strm files in "+ dirInDropbox +" for match on "+ SxxExx);
-                for(File tvShow : tvShows)
+                //init listing of existing .strms in this season dir
+                
+                //get all .strm TV episodes in the Season.X dir
+                if(seasonDir.isDirectory())
                 {
-                    boolean match = tvShow.getName().toUpperCase().contains(SxxExx.toUpperCase());
-                    //log(DEBUG, "Match = "+ match +" for " +tvShow.getName().toUpperCase() + " containing "+ SxxExx.toUpperCase());
+                    episodes = FileUtils.listFiles(seasonDir, new String[] {"strm"}, false);
+                    log(DEBUG, "Found "+ episodes.size() +" existing .strm TV Episodes in: "+seasonDir);
+                    episodesBySeasonDir.put(seasonDir, episodes);
+                }
+                else return false;//not a duplicate; its directory doesn't even exist yet
+            }
+        
+            //look for SxxExx match
+            String SxxExx = file.getSeasonEpisodeNaming();            
+            try
+            {                
+                log(DEBUG, "SxxExx DuplicateCheck for "+ episodes.size() +" .strm files in TV Shows directory for match on "+ SxxExx);
+                for(File existingEpisode : episodes)
+                {
+                    boolean match = existingEpisode.getName().toUpperCase().contains(SxxExx.toUpperCase());
+                    
                     if(match)
                     {
-                        boolean updating = (tvShow.equals(new File(destNoExt+".strm")));
+                        log(DEBUG, "SxxExx match found: \"" +existingEpisode.getName() + "\" contains \""+ SxxExx.toUpperCase()+"\"");
+                        boolean updating = (existingEpisode.equals(new File(destNoExt+".strm")));
                         if(!updating)//this means that the same season/episode exists, under a different file name. We don't need to add another one as it would be a duplicate
                         {
-                            log(INFO,"This TV Show is already archived (based on Season/Episode numbers) at: \""+tvShow+"\", will not archive again: "+file.getFullPathEscaped());
+                            setShortLogDesc("SxEx Duplicate");                            
+                            log(INFO,"This TV Show is already archived (based on Season/Episode numbers) at: \""+existingEpisode+"\", will not archive again: "+file.getFullPathEscaped());
                             allVideosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track globally
                             videosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track fr this subfolder
                             return true;
+                        }
+                        else {//we are updating (exact same file name). This is not a sXXeXX duplicate
+                            //we shoudn't get here because exact file name dup's should have been caught in previous check
+                            log(DEBUG, "Found SxxExx duplicate with exact file name match, did not expect this to happen.");
+                            return false;
                         }
                     }
                 }
@@ -746,7 +729,6 @@ public class Archiver implements Runnable, Constants
                 return false;//assume its not alrady archived
             }
         }
-
         else if(file.isMovie() || file.isMusicVideo())
         {
             return false;//dont have a good identifier (like SxxExx) for movies/music vids, so alwasy allow these to be archived/updated
@@ -755,8 +737,7 @@ public class Archiver implements Runnable, Constants
         {
             log(WARNING, "Unknown file type being checked for isFileAlreadyArchived(), defaulting to false");
             return false;
-        }
-         * */
+        }         
     }
 
     public static String findSeasonEpisodeNumbers(XBMCFile video)
@@ -978,7 +959,8 @@ public class Archiver implements Runnable, Constants
         for(int i=folders.length-2; i>=0; i--)//.length minus two to skip the file name and start at the folder above it
         {
             boolean skipThisFolder = false;
-            String folder = folders[i];
+            String folder = folders[i];   
+            folder = tools.stripExtraLabels(folder);
             for(String regex : regexSkipFolderPatterns)//check if the folder matches any of the regex excludes
             {
                 Pattern skipPattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
@@ -1006,12 +988,11 @@ public class Archiver implements Runnable, Constants
     {
         String seasonZeroFolder = getDroboxDestNoExt(file);
         seasonZeroFolder = seasonZeroFolder.substring(0, seasonZeroFolder.lastIndexOf(SEP));
-        Collection<File> files = FileUtils.listFiles(new File(seasonZeroFolder), null, false);
-        int maxEpNum = 1;
+        Collection<File> seasonZeroFiles = FileUtils.listFiles(new File(seasonZeroFolder), new String[]{"strm"}, false);
+        int maxEpNum = 1;//init
         Pattern p = Pattern.compile("S[0-9]+E[0-9]+", Pattern.CASE_INSENSITIVE);
-        for(File f : files)
-        {
-            if(!f.getName().toLowerCase().contains(".mpg")) continue;
+        for(File f : seasonZeroFiles)
+        {            
             String name = f.getName().toUpperCase();
             Matcher m = p.matcher(name);
             boolean matching = m.find();

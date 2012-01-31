@@ -400,9 +400,8 @@ public class XBMCFile implements Constants
             }
         }
         
-        //also strip (HD) labeling (commong from Hulu plugin)
-        if(source.toUpperCase().contains(" (HD)"))
-            source = source.replace(" (HD)", "").replace(" (hd)", "");//remove hd labeling if it exists
+        source = tools.stripExtraLabels(source);//remove (hd) type labeling
+        
         return source;
     }
     

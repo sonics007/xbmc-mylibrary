@@ -1,6 +1,7 @@
 
 package utilities;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -28,7 +29,8 @@ public class TVDB implements Constants
         if(video.getSubfolder()==null || !video.getSubfolder().forceTVDBLookup())
         {//tvdb lookup is NOT forced true
             log(DEBUG, "Checking if this video has already been looked up on TVDB based on original path of: "+ video.getFullPathEscaped());
-            XBMCFile previouslyLookedupVideo = tools.getVideoFromOriginalLocation(video.getFullPath());//not escaped
+            XBMCFile previouslyLookedupVideo = tools.getVideoFromOriginalLocation(video.getFullPath());//not escaped                        
+            
             if(previouslyLookedupVideo==null || !previouslyLookedupVideo.hasBeenLookedUpOnTVDB())
             {
                 log(INFO, "This video has not been succesfully looked up on the TVDB before, will attempt lookup now.");

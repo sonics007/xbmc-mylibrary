@@ -26,7 +26,7 @@ public class MusicVideoScraper implements Constants
         try
         {
             Random r = new Random();
-            Iterator<File> it = FileUtils.iterateFiles(new File(folder), new String[]{"strm","mpg"}, false);
+            Iterator<File> it = FileUtils.iterateFiles(new File(folder), new String[]{"strm"}, false);
             while(it.hasNext())
             {
                 File f = it.next();
@@ -65,7 +65,7 @@ public class MusicVideoScraper implements Constants
         PreparedStatement prep = null;
         try
         {
-            prep = (PreparedStatement) Config.scraperDB.getStatement(PREPARED_STATEMENT,sql);
+            prep = Config.scraperDB.getStatement(sql);
             prep.setString(1, API_NAME);
             prep.setTimestamp(2, new java.sql.Timestamp(System.currentTimeMillis() - ONE_DAY));//24 hours ago
             ResultSet rs = prep.executeQuery();
@@ -91,7 +91,7 @@ public class MusicVideoScraper implements Constants
         PreparedStatement prep = null;
         try
         {
-            prep = (PreparedStatement) Config.scraperDB.getStatement(PREPARED_STATEMENT,sql);
+            prep = Config.scraperDB.getStatement(sql);
             
             prep.setTimestamp(1, new java.sql.Timestamp(System.currentTimeMillis()));//last_query is right now                                
             prep.setString(2, API_NAME);//api_name
@@ -313,9 +313,11 @@ public class MusicVideoScraper implements Constants
                     + "?appid="+APP_ID
                     + "&response=artists,images,categories";
 
-            String checkSQl = "SELECT query_time FROM APIQueries WHERE query_url = "+ tools.sqlString(url) +" AND api_name = "+ tools.sqlString(API_NAME);
+            String checkSQl = "SELECT query_time FROM APIQueries "
+                    + "WHERE query_url = ? "
+                    + "AND api_name = ?";
             
-            Long lastqueried = Config.scraperDB.getSingleTimestamp(checkSQl);
+            Long lastqueried = Config.scraperDB.getSingleTimestamp(checkSQl,tools.params(url,API_NAME));
             
             
             if(lastqueried != null)

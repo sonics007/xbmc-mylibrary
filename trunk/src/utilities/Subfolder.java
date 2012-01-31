@@ -16,7 +16,9 @@ public class Subfolder implements Constants
     Source source;
     String regexMatchingName = null;//if the name is a regex, this will be set to what the regex matches
     boolean canContainMultiPartVideos = false;
-    private boolean download = false;//download instead of stream
+    
+    //Downloading support has been removed
+    //private boolean download = false;//download instead of stream
     private int level_deep;
     String compression;
     
@@ -34,14 +36,16 @@ public class Subfolder implements Constants
     {
         return level_deep;
     }
-     public void setDownload(boolean download)
+    /*
+    public void setDownload(boolean download)
     {
         this.download =download;
-    }
+    }     
+     
     public boolean download()
     {
         return download;
-    }
+    }    
     public void setCompression(String compression)
     {
         this.compression = compression;
@@ -50,6 +54,7 @@ public class Subfolder implements Constants
     {
         return compression;
     }
+    */     
     
     public boolean canContainMultiPartVideos()
     {
@@ -301,7 +306,7 @@ public class Subfolder implements Constants
                         nameToCheck = folders[z] + (nameToCheck.isEmpty() ? "" :"/"+nameToCheck);                    
 
                     boolean regexMatches = tools.regexMatch(nameToCheck, folderPath);
-                    Config.log(DEBUG,"DigDeeper Regex match ? "+ regexMatches +": \""+nameToCheck + "\" ["+(regexMatches ? "matches" : "does not match")+"] \""+folderPath+"\"");
+                    //Config.log(DEBUG,"DigDeeper Regex match ? "+ regexMatches +": \""+nameToCheck + "\" ["+(regexMatches ? "matches" : "does not match")+"] \""+folderPath+"\"");
                     if(regexMatches)
                     {
                         regexMatch = tools.getRegexMatch(nameToCheck, folderPath);
@@ -318,13 +323,13 @@ public class Subfolder implements Constants
             else//regular, non-regex match
             {
                 match = getFullName().toLowerCase().startsWith(folderPath.toLowerCase());
-                Config.log(DEBUG,"DigDeeper ? "+ match +": "+getFullName().toLowerCase() + " ["+(!match ? "does not start" : "starts")+" with] "+folderPath.toLowerCase());
+                //Config.log(DEBUG,"DigDeeper ? "+ match +": "+getFullName().toLowerCase() + " ["+(!match ? "does not start" : "starts")+" with] "+folderPath.toLowerCase());
             }
 
             
             if(match)
             {
-                Config.log(DEBUG, "Dig deeper=true for Subfolder: "+ getFullName() + ", current level = "+ folderPath);
+                //Config.log(DEBUG, "Dig deeper=true for Subfolder: "+ getFullName() + ", current level = "+ folderPath);
                 return true;//sourceName is a folder deeper in the source (recursive match)
             }
         }

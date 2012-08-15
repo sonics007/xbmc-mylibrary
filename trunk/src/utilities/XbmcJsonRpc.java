@@ -530,7 +530,7 @@ public class XbmcJsonRpc implements Runnable, Constants
                                                 file, //required
                                                 label, //required
                                                 directory.has("thumbnail") ? directory.getString("thumbnail") : null,
-												null, //AngryCamel - 20120805 2351
+                                                -1, //AngryCamel - 20120805 2351
                                                 fullPathLabel,
                                                 subf);
                                 filesAndDirsFound.put(xbmcFile);

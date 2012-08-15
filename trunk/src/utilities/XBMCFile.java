@@ -64,7 +64,7 @@ public class XBMCFile implements Constants
 	
 	//AngryCamel - 20120805 2351
     //public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, String parentPath, Subfolder matchingSubfolder)
-	public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime, String parentPath, Subfolder matchingSubfolder)
+    public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime, String parentPath, Subfolder matchingSubfolder)
     {
         this.fileOrDir = fileOrDir;
         this.fanart = fanart;
@@ -283,7 +283,7 @@ public class XBMCFile implements Constants
     }
 	
 	//AngryCamel - 20120805 2351
-    public int setRuntime(int runtime)
+    public void setRuntime(int runtime)
     {
         this.runtime = runtime;
     }

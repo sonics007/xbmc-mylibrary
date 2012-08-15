@@ -167,7 +167,7 @@ public class XBMCInterface implements Constants
 
                 String xbmcPath = XBMCInterface.getFullXBMCPath(archivedStrmFile.getParentFile());//the path (not including file)
                 
-                if (utilities.Config.LINUX_SAMBA_PREFIX != null)
+                if (tools.valid(Config.LINUX_SAMBA_PREFIX ))
                 {
                 	xbmcPath = utilities.Config.LINUX_SAMBA_PREFIX + xbmcPath;
                 	Config.log(DEBUG, "Using LINUX_SAMBA_PREFIX. Concatentated path: "+ xbmcPath);

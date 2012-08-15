@@ -180,8 +180,12 @@ public class PlayOnArchiver implements Constants
         //pattern one, matches most normal TV season/episode patterns for netflix
         Pattern seasonEpisodePattern = Pattern.compile("(season|series|vol\\.) [0-9]+/[0-9][0-9]:",Pattern.CASE_INSENSITIVE);//Netflix/New Arrivals/New TV to watch instantly/A-B/3rd Rock from the Sun: Season 3/08: A Friend in Dick
         Matcher seasonEpisodeMatcher = seasonEpisodePattern.matcher(video.getFullPathEscaped());
+        
+        //another pattern to find when no season/series word is specified        
+        Pattern seasonEpisodePattern2 = Pattern.compile("/[0-9]+/[0-9][0-9]:");//Netflix/Instant Queue/Alphabetical/B/Blue's Clues/5/28: Our Neighborhood Festival
+        Matcher seasonEpisodeMatcher2 = seasonEpisodePattern2.matcher(video.getFullPathEscaped());
 
-        //pattern two, matches absolutely numbered TV shows (no season)
+        //pattern that matches absolutely numbered TV shows (no season)
         Pattern absoluteEpisodePattern = Pattern.compile("^[0-9][0-9]:");//Netflix/Instant Queue/Alphabetical/B/The Blue Planet: Tidal Seas/01: Tidal Seas
         Matcher absoluteEpisodeMatcher = absoluteEpisodePattern.matcher(video.getFileLabel());//only chck the file name because we are using the ^ start of string regex identifier
 
@@ -198,6 +202,16 @@ public class PlayOnArchiver implements Constants
                     int episodeNum = Integer.parseInt(match.substring(match.indexOf("/")+1, match.indexOf(":")));
                     video.setSeasonNumber(seasonNum);
                     video.setEpisodeNumber(episodeNum);
+                }
+                else if(seasonEpisodeMatcher2.find())
+                {
+                    video.setType(TV_SHOW);
+                    String match = seasonEpisodeMatcher2.group();// "/5/28:"
+                    String[] parts = (match.substring(1, match.indexOf(":"))).split("/"); // "5/28"
+                    int seasonNum = Integer.parseInt(parts[0]);
+                    int episodeNum = Integer.parseInt(parts[1]);
+                    video.setSeasonNumber(seasonNum);
+                    video.setEpisodeNumber(episodeNum);                    
                 }
                 else if (absoluteEpisodeMatcher.find())
                 {
@@ -258,9 +272,11 @@ public class PlayOnArchiver implements Constants
                     if(sa.length != 2) throw new Exception("File label contains more than one ':'. Cannot parse.");
                     series = sa[0];
                     title = sa[1].trim();
-                    boolean is24 = series.trim().equals("24") && (title.toLowerCase().contains("a.m") || title.toLowerCase().contains("p.m"));                    
+                    boolean is24 = (series.trim().equals("24") || video.getFullPathEscaped().contains("/24/"))
+                            && (title.toLowerCase().contains("a.m") || title.toLowerCase().contains("p.m"));                    
                     if(!is24)//exclude 24 becuase the series should be an integer
                     {
+                        series = "24";
                         if(tools.isInt(series))//this is actually the episode number, not the series.
                         {
                             series = null;

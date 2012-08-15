@@ -165,7 +165,13 @@ public class XBMCInterface implements Constants
                 String metaDataType = qc.getTypeOfMetaData();
                 String value = qc.getValue();
 
-                String xbmcPath = XBMCInterface.getFullXBMCPath(archivedStrmFile.getParentFile());//the path (not including file)                
+                String xbmcPath = XBMCInterface.getFullXBMCPath(archivedStrmFile.getParentFile());//the path (not including file)
+                
+                if (utilities.Config.LINUX_SAMBA_PREFIX != null)
+                {
+                	xbmcPath = utilities.Config.LINUX_SAMBA_PREFIX + xbmcPath;
+                	Config.log(DEBUG, "Using LINUX_SAMBA_PREFIX. Concatentated path: "+ xbmcPath);
+                }
 
                 //check if it is in the video library database
                 String videoExistsSql = "SELECT idFile "

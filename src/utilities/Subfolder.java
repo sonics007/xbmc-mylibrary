@@ -341,14 +341,16 @@ public class Subfolder implements Constants
      * Returns true if it is allowed by ALL filters or filter matching is not used
      * Returns false if this path should be skipped
      */
-    public boolean isAllowedByFilters(String path)
+	//AngryCamel - 20120805 2351
+    // public boolean isAllowedByFilters(String path)
+	public boolean isAllowedByFilters(String path, int runtime)
     {
         path = Config.escapePath(path);
        //check against filters
        boolean shouldFilter = shouldFilter();
        boolean filterMatch = true;//default
        if(shouldFilter)
-           filterMatch = Filter.FilterMatch(path, filters);
+           filterMatch = Filter.FilterMatch(path, runtime, filters); //AngryCamel - 20120805 2351
         if(!filterMatch)
         {
             Config.log(DEBUG, "Skipping this path because it doesn't match any filters: "+ path);

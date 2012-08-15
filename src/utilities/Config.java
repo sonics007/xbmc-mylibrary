@@ -44,6 +44,7 @@ public class Config implements Constants
     public static int LOG_EXPIRE_DAYS = 30;
     public static String BASE_PROGRAM_DIR = "C:\\XBMC.MyLibrary";
     public static String DROPBOX = null;
+    public static String LINUX_SAMBA_PREFIX = null;
     public static Set<Source> ALL_SOURCES = new LinkedHashSet<Source>();
     
     public static List<String> XBMC_THUMBNAILS_FOLDERS = new ArrayList<String>();;
@@ -486,6 +487,15 @@ public class Config implements Constants
             File db = new File(DROPBOX);
             if(!db.exists())db.mkdir();
             log(DEBUG, "Streaming Dropbox = "+ DROPBOX);
+            
+            //Linux Samba Prefix - Used to support meta-data alteration on Linux systems
+            String linuxSambaPrefix = dropboxElem.getChildText("LinuxSambaPrefix");
+            if (valid(linuxSambaPrefix))
+            {
+                if(linuxSambaPrefix.endsWith("/") || linuxSambaPrefix.endsWith("\\")) linuxSambaPrefix = linuxSambaPrefix.substring(0, linuxSambaPrefix.length()-1);//trim trailing slash
+                LINUX_SAMBA_PREFIX = linuxSambaPrefix;
+                log(DEBUG, "Using Linux Samba Prefix = "+ LINUX_SAMBA_PREFIX);
+            }
             
             String downloadedDropbox = dropboxElem.getChildText("downloaded");
             if(!valid(downloadedDropbox))

@@ -33,6 +33,9 @@ public interface Constants
     public final static String  MOVIE_SET = "MOVIE_SET";
     public final static String  PREFIX = "PREFIX";
     public final static String  SUFFIX = "SUFFIX";
+	
+	//AngryCamel - 20120805 2351
+    public final static String  RUNTIME = "runtime";
 
     public final static String  FOLDERS_ONLY = "FOLDERS_ONLY";
     public final static String  FILES_ONLY = "FILES_ONLY";

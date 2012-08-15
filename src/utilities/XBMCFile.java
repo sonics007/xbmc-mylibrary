@@ -30,6 +30,9 @@ public class XBMCFile implements Constants
     boolean hasBeenLookedUpOnTVDB = false;
     String fileOrDir;
     private boolean skippedBecauseAlreadyArchived = false;
+	
+	//AngryCamel - 20120805 2351
+	int runtime=0;
     
     
     ///for multi-file vidoes
@@ -58,24 +61,36 @@ public class XBMCFile implements Constants
         dest.setTVDBId(source.getTVDBId());
         dest.setYear(source.getYear());
     }
-    public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, String parentPath, Subfolder matchingSubfolder)
+	
+	//AngryCamel - 20120805 2351
+    //public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, String parentPath, Subfolder matchingSubfolder)
+	public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime, String parentPath, Subfolder matchingSubfolder)
     {
         this.fileOrDir = fileOrDir;
         this.fanart = fanart;
         this.file = file;
         this.fileLabel = fileLabel;// == null ? null : fileLabel.replace("/", "-");
         this.thumbnail = thumbnail;
+		
+		//AngryCamel - 20120805 2351
+        this.runtime = runtime;
+		
         this.parentPath = parentPath;
         this.subfolder = matchingSubfolder;
     }
     
-    public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail)
+    //AngryCamel - 20120805 2351
+    //public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail)
+	public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime)
     {
         this.fileOrDir = fileOrDir;
         this.fanart = fanart;
         this.file = file;
         this.fileLabel = fileLabel;// == null ? null : fileLabel.replace("/", "-");
         this.thumbnail = thumbnail;
+		
+		//AngryCamel - 20120805 2351
+        this.runtime = runtime;
     }
     
     //limited constructor used in manual archiving
@@ -266,6 +281,13 @@ public class XBMCFile implements Constants
     {
         this.episodeNumber = episodeNumber;
     }
+	
+	//AngryCamel - 20120805 2351
+    public int setRuntime(int runtime)
+    {
+        this.runtime = runtime;
+    }
+	
     public int getSeasonNumber()
     {
         return seasonNumber;
@@ -377,6 +399,12 @@ public class XBMCFile implements Constants
     public String getParentPath()
     {
         return parentPath;
+    }
+	
+	//AngryCamel - 20120805 2351
+    public int getRuntime()
+    {
+        return runtime;
     }
 
     public String stripExtras(String source)

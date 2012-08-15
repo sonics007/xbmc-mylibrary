@@ -343,9 +343,10 @@ public class XbmcJsonRpc implements Runnable, Constants
             XBMCFile xbmcFile = new XBMCFile(
                         fileOrDir,
                         json.has("fanart") ? json.getString("fanart") : null,
-                        json.has("file") ? json.getString("file") : null,
+                        json.has("file") ? json.getString("file") : null, 
                         json.has("label") ? json.getString("label") : null,
-                        json.has("thumbnail") ? json.getString("thumbnail") : null
+                        json.has("thumbnail") ? json.getString("thumbnail") : null,
+						json.has("runtime") ? json.getInt("runtime") : null //AngryCamel - 20120805 2351
                     );
             return xbmcFile;
         }
@@ -416,7 +417,14 @@ public class XbmcJsonRpc implements Runnable, Constants
         params.put("directory",dir);
         
         final String mediaType = "files";//files should return everything after fix here: http://forum.xbmc.org/showthread.php?t=114921
-        params.put("media", mediaType);        
+        params.put("media", mediaType);  
+        
+		//AngryCamel - 20120805 2351
+		// -Added runtime for the runtime filter.
+		// -You were referencing label (returned when title is specified in properties), thumbnail, and fanart when creating XBMCFile but
+		//  they were not coming back in the JSON reponse, so I added those while I was at it.
+        final String properties = "[\"runtime\", \"title\", \"thumbnail\", \"fanart\"]";//files should return everything after fix here: http://forum.xbmc.org/showthread.php?t=114921
+        params.put("properties", properties);   
         
         /*Sort testing
          * 
@@ -477,10 +485,11 @@ public class XbmcJsonRpc implements Runnable, Constants
                                     file.getString("file"), //required
                                     file.getString("label"), //required
                                     file.has("thumbnail") ? file.getString("thumbnail") : null,
+									file.has("runtime") ? file.getInt("runtime") : null, //AngryCamel - 20120805 2351
                                     fullPathLabel,
                                     subf);
 
-                           boolean allowed = subf.isAllowedByFilters(xbmcFile.getFullPathEscaped());
+                           boolean allowed = subf.isAllowedByFilters(xbmcFile.getFullPathEscaped(), xbmcFile.getRuntime()); //AngryCamel - 20120805 2351
                            if(!allowed) continue;
 
                            boolean excluded = subf.isExcluded(xbmcFile.getFullPathEscaped());
@@ -521,6 +530,7 @@ public class XbmcJsonRpc implements Runnable, Constants
                                                 file, //required
                                                 label, //required
                                                 directory.has("thumbnail") ? directory.getString("thumbnail") : null,
+												null, //AngryCamel - 20120805 2351
                                                 fullPathLabel,
                                                 subf);
                                 filesAndDirsFound.put(xbmcFile);

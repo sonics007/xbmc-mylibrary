@@ -944,7 +944,8 @@ public class Archiver implements Runnable, Constants
         final String optionalYear ="(\\([0-9]+\\)|\\[[0-9]+\\])?";//matches (nnnn) or [nnnn]
         skipFolders.add("(Full Episodes|Episodes|Clips|Seasons)");//literal skips
         skipFolders.add("((Season|Series|Set|Episodes|Collection) (\\([0-9]+\\)|[0-9]+))"+" ?"+optionalYear);//name + number + optional_space + optional_year
-
+        skipFolders.add("[0-9]+");//new format used by playon specified season number as single integer folder
+        
         String series = getParentFolderWithSkips(video.getFullPath().split(DELIM),skipFolders);
         if(tools.valid(series))
         {

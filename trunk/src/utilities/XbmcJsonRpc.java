@@ -417,6 +417,7 @@ public class XbmcJsonRpc implements Runnable, Constants
                         BlockingQueue<XBMCFile> filesAndDirsFound//the list which all files/dirs will be added to                        
                         )
     {        
+    	
         if(!subf.canAddAnotherVideo()) return;
         Config.log(DEBUG, "Now looking in:" + Config.escapePath(fullPathLabel) + (Config.LOGGING_LEVEL == DEBUG ?" (" + dir+")" :""));
 
@@ -509,9 +510,113 @@ public class XbmcJsonRpc implements Runnable, Constants
                             filesAndDirsFound.put(xbmcFile);//passed all tests
                         }
                     }                                       
-                }
+    }
+    
+    //AngryCamel - 20120806 214700
+    //  -Added runtime parsing to detect the format and if necessary translate to a number of minutes as an integer
+    public static int parseRuntime(String runtimeStr)
+    {
+    	if(runtimeStr.equals(""))
+	    	return 0;
+    	
+    	int runTime = 0;
+    	
+    	//HH:MM:SS Pattern matches any of the following:
+    	//39:10, 31:46, 1:39:58, 9:13, 69:58:06
+    	String hhmmssPattern = "(\\d*):?(\\d*)?:([0-5][0-9])";  
+    	
+    	// Compile and use regular expression
+    	Pattern pattern = Pattern.compile(hhmmssPattern);
+    	Matcher matcher = pattern.matcher(runtimeStr);
+    	boolean matchFound = matcher.find();
+    	if (matchFound) {
+    		int hours = 0, mins = 0, secs = 0;
 
-                
+    		/*
+        	String groupStr = "";
+        	for (int i=0; i<=matcher.groupCount(); i++) {
+                groupStr += " Group("+i+"): "+matcher.group(i);
+            }
+        	Config.log(Config.DEBUG, "Match:"+ groupStr);
+        	*/
+        	
+    		if(matcher.groupCount()==3)
+    		{
+    	    	//For patterns without an hour segment, the minute will go into group 1 and the seconds into group 3. Group 2 will be empty
+    	    	//For patterns with an hour segment (total of 4), the hour will go into group 1, minute into group 2, and the seconds into group 3
+    			if(matcher.group(2).length() < 1)
+    			{
+    				//This is a MM:SS match
+    				//Config.log(Config.DEBUG, "Matched on MM:SS pattern: "+ runtimeStr);
+    				
+    				//Parse the minutes
+    	        	if(matcher.group(1).length()>0)
+    	        	{
+						try{
+							mins = Integer.parseInt(matcher.group(1));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Mins: "+ mins);
+    				
+    				//Parse the seconds
+    	        	if(matcher.group(3).length()>0)
+    	        	{
+						try{
+							secs = Integer.parseInt(matcher.group(3));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Secs: "+ secs);
+    			}
+    			else
+    			{
+    				//This is a HH:MM:SS match
+    				//Config.log(Config.DEBUG, "Matched on HH:MM:SS pattern: "+ runtimeStr);
+    				
+    				//Parse the hours
+    	        	if(matcher.group(1).length()>0)
+    	        	{
+						try{
+							hours = Integer.parseInt(matcher.group(1));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Hours: "+ hours);
+    	        	
+    				//Parse the minutes
+    	        	if(matcher.group(2).length()>0)
+    	        	{
+						try{
+							mins = Integer.parseInt(matcher.group(2));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Mins: "+ mins);
+    				
+    				//Parse the seconds
+    	        	if(matcher.group(3).length()>0)
+    	        	{
+						try{
+							secs = Integer.parseInt(matcher.group(3));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Secs: "+ secs);
+    			}
+    		}
+    	    //Now add it all up
+    	    runTime = (60*60*hours) + (60*mins) + secs;
+    	}
+    	else
+    	{
+    		//Format did not match HH:MM:SS format; try to parse as int
+    		//Config.log(Config.DEBUG, "Runtime format has no pattern (parsing as int): "+ runtimeStr);
+			try{
+				runTime = Integer.parseInt(runtimeStr);
+			}catch (NumberFormatException e){}
+    	}
+
+    	//Config.log(Config.DEBUG, "Parsed " + runtimeStr + " to " + runTime + " mins");
+        return runTime;
+    }
+
+ 
                 if(!directories.isEmpty())
                 {                    
                     for(int i=0;i<directories.size();i++)

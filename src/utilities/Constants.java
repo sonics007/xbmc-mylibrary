@@ -36,6 +36,12 @@ public interface Constants
 	
 	//AngryCamel - 20120805 2351
     public final static String  RUNTIME = "runtime";
+    
+	//AngryCamel - 20120815 2246
+    public final static String  FORCE_SERIES = "force_series";
+
+	//AngryCamel - 20120817 1620
+    public final static String  GENERIC = "generic";
 
     public final static String  FOLDERS_ONLY = "FOLDERS_ONLY";
     public final static String  FILES_ONLY = "FILES_ONLY";

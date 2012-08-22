@@ -5,6 +5,9 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.json.*;
 
 public class XbmcJsonRpc implements Runnable, Constants
@@ -340,13 +343,17 @@ public class XbmcJsonRpc implements Runnable, Constants
     public static XBMCFile getXBMCFile(String fileOrDir, JSONObject json)
     {
         try {
+        	//AngryCamel - 20120806 2206
+        	String runtimeStr = json.has("runtime") ? json.getString("runtime") : "";
+        	int runtime = parseRuntime(runtimeStr);
+        	
             XBMCFile xbmcFile = new XBMCFile(
                         fileOrDir,
                         json.has("fanart") ? json.getString("fanart") : null,
                         json.has("file") ? json.getString("file") : null, 
                         json.has("label") ? json.getString("label") : null,
                         json.has("thumbnail") ? json.getString("thumbnail") : null,
-						json.has("runtime") ? json.getInt("runtime") : null //AngryCamel - 20120805 2351
+						runtime //AngryCamel - 20120806 2206
                     );
             return xbmcFile;
         }
@@ -423,7 +430,7 @@ public class XbmcJsonRpc implements Runnable, Constants
 		// -Added runtime for the runtime filter.
 		// -You were referencing label (returned when title is specified in properties), thumbnail, and fanart when creating XBMCFile but
 		//  they were not coming back in the JSON reponse, so I added those while I was at it.
-        final String properties = "[\"runtime\", \"title\", \"thumbnail\", \"fanart\"]";//files should return everything after fix here: http://forum.xbmc.org/showthread.php?t=114921
+        final String[] properties = {"runtime", "title", "thumbnail", "fanart"};//files should return everything after fix here: http://forum.xbmc.org/showthread.php?t=114921
         params.put("properties", properties);   
         
         /*Sort testing
@@ -478,14 +485,18 @@ public class XbmcJsonRpc implements Runnable, Constants
                     if(!files.isEmpty())
                     {
                         for(JSONObject file : files)
-                        {                           
-                           XBMCFile xbmcFile = new XBMCFile(
+                        {
+                        	//AngryCamel - 20120806 2206
+                        	String runtimeStr = file.has("runtime") ? file.getString("runtime") : "";
+                        	int runtime = parseRuntime(runtimeStr);
+                        	
+                        	XBMCFile xbmcFile = new XBMCFile(
                                     FILE,
                                     file.has("fanart") ? file.getString("fanart") : null,
                                     file.getString("file"), //required
                                     file.getString("label"), //required
                                     file.has("thumbnail") ? file.getString("thumbnail") : null,
-									file.has("runtime") ? file.getInt("runtime") : null, //AngryCamel - 20120805 2351
+                                    runtime, //AngryCamel - 20120806 2206
                                     fullPathLabel,
                                     subf);
 
@@ -596,6 +607,110 @@ public class XbmcJsonRpc implements Runnable, Constants
                 subf.getSource().setJSONRPCErrors(true);
             }
         }//end if valid json returned
+    }
+    
+    //AngryCamel - 20120806 214700
+    //  -Added runtime parsing to detect the format and if necessary translate to a number of minutes as an integer
+    public static int parseRuntime(String runtimeStr)
+    {
+    	if(runtimeStr.equals(""))
+	    	return 0;
+    	
+    	int runTime = 0;
+    	
+    	//HH:MM:SS Pattern matches any of the following:
+    	//39:10, 31:46, 1:39:58, 9:13, 69:58:06
+    	String hhmmssPattern = "(\\d*):?(\\d*)?:([0-5][0-9])";  
+    	
+    	// Compile and use regular expression
+    	Pattern pattern = Pattern.compile(hhmmssPattern);
+    	Matcher matcher = pattern.matcher(runtimeStr);
+    	boolean matchFound = matcher.find();
+    	if (matchFound) {
+    		int hours = 0, mins = 0, secs = 0;
+
+    		/*
+        	String groupStr = "";
+        	for (int i=0; i<=matcher.groupCount(); i++) {
+                groupStr += " Group("+i+"): "+matcher.group(i);
+            }
+        	Config.log(Config.DEBUG, "Match:"+ groupStr);
+        	*/
+        	
+    		if(matcher.groupCount()==3)
+    		{
+    	    	//For patterns without an hour segment, the minute will go into group 1 and the seconds into group 3. Group 2 will be empty
+    	    	//For patterns with an hour segment (total of 4), the hour will go into group 1, minute into group 2, and the seconds into group 3
+    			if(matcher.group(2).length() < 1)
+    			{
+    				//This is a MM:SS match
+    				//Config.log(Config.DEBUG, "Matched on MM:SS pattern: "+ runtimeStr);
+    				
+    				//Parse the minutes
+    	        	if(matcher.group(1).length()>0)
+    	        	{
+						try{
+							mins = Integer.parseInt(matcher.group(1));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Mins: "+ mins);
+    				
+    				//Parse the seconds
+    	        	if(matcher.group(3).length()>0)
+    	        	{
+						try{
+							secs = Integer.parseInt(matcher.group(3));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Secs: "+ secs);
+    			}
+    			else
+    			{
+    				//This is a HH:MM:SS match
+    				//Config.log(Config.DEBUG, "Matched on HH:MM:SS pattern: "+ runtimeStr);
+    				
+    				//Parse the hours
+    	        	if(matcher.group(1).length()>0)
+    	        	{
+						try{
+							hours = Integer.parseInt(matcher.group(1));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Hours: "+ hours);
+    	        	
+    				//Parse the minutes
+    	        	if(matcher.group(2).length()>0)
+    	        	{
+						try{
+							mins = Integer.parseInt(matcher.group(2));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Mins: "+ mins);
+    				
+    				//Parse the seconds
+    	        	if(matcher.group(3).length()>0)
+    	        	{
+						try{
+							secs = Integer.parseInt(matcher.group(3));
+						}catch (NumberFormatException e){}
+	    	        }
+    	        	//Config.log(Config.DEBUG, "   Secs: "+ secs);
+    			}
+    		}
+    	    //Now add it all up
+    	    runTime = (60*60*hours) + (60*mins) + secs;
+    	}
+    	else
+    	{
+    		//Format did not match HH:MM:SS format; try to parse as int
+    		//Config.log(Config.DEBUG, "Runtime format has no pattern (parsing as int): "+ runtimeStr);
+			try{
+				runTime = Integer.parseInt(runtimeStr);
+			}catch (NumberFormatException e){}
+    	}
+
+    	Config.log(Config.DEBUG, "Parsed " + runtimeStr + " to " + runTime + " mins");
+        return runTime;
     }
 
  

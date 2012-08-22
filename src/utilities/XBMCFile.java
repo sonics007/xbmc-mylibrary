@@ -62,8 +62,7 @@ public class XBMCFile implements Constants
         dest.setYear(source.getYear());
     }
 	
-	//AngryCamel - 20120805 2351
-    //public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, String parentPath, Subfolder matchingSubfolder)
+	//AngryCamel - 20120805 2351 - Added runtime
     public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime, String parentPath, Subfolder matchingSubfolder)
     {
         this.fileOrDir = fileOrDir;
@@ -79,8 +78,7 @@ public class XBMCFile implements Constants
         this.subfolder = matchingSubfolder;
     }
     
-    //AngryCamel - 20120805 2351
-    //public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail)
+    //AngryCamel - 20120805 2351 - Added runtime
 	public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime)
     {
         this.fileOrDir = fileOrDir;
@@ -215,6 +213,10 @@ public class XBMCFile implements Constants
         if(isMovie() && tools.valid(getTitle())) return true;
         if(isTvShow() && tools.valid(getSeries()) && getSeasonNumber() > -1 && getEpisodeNumber() > -1) return true;//title not required
         if(isMusicVideo() && tools.valid(getTitle()) && tools.valid(getArtist())) return true;
+
+    	//AngryCamel - 20120817 1620 - Added generic
+        if(isGeneric() && tools.valid(getSeries()) && tools.valid(getTitle())) return true;
+        
         return false;
     }
     public void setArtist(String artist)
@@ -258,7 +260,20 @@ public class XBMCFile implements Constants
     }
     public void setSeries(String series)
     {                
-        this.series = stripExtras(series);
+    	//AngryCamel - 20120817 1620
+    	//   Check if there is a forced series in the subfolder config and apply it instead of whatever was passed.
+    	try {
+			if(tools.valid(this.getSubfolder().getForceSeries()))
+			{
+				this.series = stripExtras(this.getSubfolder().getForceSeries());
+			}
+			else
+			{
+				this.series = stripExtras(series);
+			}
+		} catch (Exception e) {
+			this.series = stripExtras(series);
+		}
     }
     
     public String getSeries()
@@ -306,7 +321,8 @@ public class XBMCFile implements Constants
     }
     public boolean knownType()
     {
-        return isMovie() || isTvShow() || isMusicVideo();
+    	//AngryCamel - 20120817 1620 - added isGeneric
+        return isMovie() || isTvShow() || isMusicVideo() || isGeneric();
     }
     public boolean isTvShow()
     {
@@ -320,6 +336,13 @@ public class XBMCFile implements Constants
     {
         return MUSIC_VIDEO.equals(type);
     }
+    
+	//AngryCamel - 20120817 1620 - added isGeneric
+    public boolean isGeneric()
+    {
+        return GENERIC.equals(type);
+    }
+    
     public String getFanart()
     {
         return fanart;

@@ -731,6 +731,12 @@ public class importer extends Config implements Constants
                 return false;
             }
         }
+    	//AngryCamel - 20120817 1620 - Added generic
+        else if(video.isGeneric())
+        {
+            log(WARNING, "Cannot generate .nfo files for generic videos.");
+            return false;
+        }
         return false;
     }
     

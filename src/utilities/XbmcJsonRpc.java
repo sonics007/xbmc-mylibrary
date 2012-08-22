@@ -814,7 +814,7 @@ public class XbmcJsonRpc implements Runnable, Constants
 			}catch (NumberFormatException e){}
     	}
 
-    	Config.log(Config.DEBUG, "Parsed " + runtimeStr + " to " + runTime + " mins");
+    	//Config.log(Config.DEBUG, "Parsed " + runtimeStr + " to " + runTime + " mins");
         return runTime;
     }
 

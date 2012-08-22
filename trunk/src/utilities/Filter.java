@@ -88,7 +88,7 @@ public class Filter
 						//Handle Equal To check here
 						if(runtime == runtimeFilter)
 						{
-							return true;
+							//return true;
 						}
 						else
 						{
@@ -100,7 +100,7 @@ public class Filter
 						//Handle Greater Than check here
 						if(runtime > runtimeFilter)
 						{
-							return true;
+							//return true;
 						}
 						else
 						{
@@ -112,7 +112,7 @@ public class Filter
 						//Handle Less Than check here
 						if(runtime < runtimeFilter)
 						{
-							return true;
+							//return true;
 						}
 						else
 						{
@@ -124,7 +124,7 @@ public class Filter
 						//Handle Not Equal To check here
 						if(runtime != runtimeFilter)
 						{
-							return true;
+							//return true;
 						}
 						else
 						{
@@ -136,7 +136,7 @@ public class Filter
 						//Handle Greater than or equal to check here
 						if(runtime >= runtimeFilter)
 						{
-							return true;
+							//return true;
 						}
 						else
 						{
@@ -148,7 +148,7 @@ public class Filter
 						//Handle Less than or equal to check here
 						if(runtime <= runtimeFilter)
 						{
-							return true;
+							//return true;
 						}
 						else
 						{

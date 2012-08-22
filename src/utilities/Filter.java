@@ -29,7 +29,28 @@ public class Filter
                 }
                 else if(type.equalsIgnoreCase(Constants.CONTAINS))
                 {
-                    if(!path.toLowerCase().contains(filterString.toLowerCase()))
+    				//AngryCamel - 20120818 0201
+                	//  "Only videos that match ALL filters will be included (unless it matched an exclude)" is
+                	//    what the documentation states for the contains item. This however, does not provide any
+                	//    way of specifying a logical operator OR to the filter. Because it must match ALL, it is
+                	//    always performing an AND comparison for each "contains" item listed
+                	//  This features keeps that AND behavior between each contains element but allows the text 
+                	//    of the element body to delimited by an OR operator "||". This double pipe OR operator
+                	//    will be used as a delimiter to split the contains criteria and if any of them match, then
+                	//    the filter will pass.
+                	boolean orGroupMatch = false;
+                	String[] orItems = filterString.toLowerCase().split("\\|\\|");
+                    for(String orItem : orItems)
+                    {
+                        boolean match = path.toLowerCase().contains(orItem.trim());
+                        if(match)
+                        {
+                        	orGroupMatch = true;
+                        	break;
+                        }
+                    }
+                    //Config.log(Config.DEBUG, "Include ? "+ orGroupMatch +" \""+path+"\" "+(!orGroupMatch ? "does not contain" : "contains")+"  \""+Arrays.toString(orItems)+"\"");
+                    if(!orGroupMatch)
                         return false;//this path does not contains this string, return false because all filters must match
                 }
 				//AngryCamel - 20120805 2351

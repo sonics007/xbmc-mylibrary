@@ -278,7 +278,7 @@ public class importer extends Config implements Constants
                 }
                 finally
                 {
-                    archiver.canStop();//let it know that the queue is not being fed any more so the archive can finishe once it runs out of files to check
+                    archiver.canStop();//let it know that the queue is not being fed any more so the archive can finish once it runs out of files to check
                 }
                 log(NOTICE, "Done retrieving files from JSON-RPC for subfolder: "+subf.getFullName());
 

@@ -1111,7 +1111,7 @@ public class tools implements Constants
             return null;
         }
         
-        //Config.log(DEBUG, "Raw response from POST. Response Code = "+conn.getResponseCode()+" ("+conn.getResponseMessage()+"):\r\n"+ response);
+        Config.log(DEBUG, "Raw response from POST. Response Code = "+conn.getResponseCode()+" ("+conn.getResponseMessage()+"):\r\n"+ response);
         return response.toString();
     }
     public static int getContentLength(String data) throws UnsupportedEncodingException{        

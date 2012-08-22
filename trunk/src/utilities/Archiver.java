@@ -4,6 +4,7 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.*;
+
 import org.apache.commons.io.FileUtils;
 
 public class Archiver implements Runnable, Constants
@@ -53,8 +54,8 @@ public class Archiver implements Runnable, Constants
     public Map<File,String> videosSkippedBecauseAlreadyArchived = new LinkedHashMap<File,String>();
     public Map<File,String> filesArchived = new HashMap<File,String>();
 
-    public int tvSuccess = 0, tvFail = 0, musicVideoSuccess = 0, musicVideoFail = 0, movieSuccess = 0, movieFail = 0,archiveSuccess = 0, archiveFail = 0, archiveSkip =0, newArchivedCount = 0, updatedCount = 0;    
-    public static int globaltvSuccess = 0, globaltvFail = 0, globalmusicVideoSuccess = 0, globalmusicVideoFail = 0, globalmovieSuccess = 0, globalmovieFail = 0, globalarchiveSuccess = 0, globalarchiveFail = 0, globalarchiveSkip =0, globalnewArchivedCount = 0, globalupdatedCount = 0;
+    public int tvSuccess = 0, tvFail = 0, musicVideoSuccess = 0, musicVideoFail = 0, movieSuccess = 0, movieFail = 0, genericSuccess = 0, genericFail = 0,archiveSuccess = 0, archiveFail = 0, archiveSkip =0, newArchivedCount = 0, updatedCount = 0;    
+    public static int globaltvSuccess = 0, globaltvFail = 0, globalmusicVideoSuccess = 0, globalmusicVideoFail = 0, globalgenericSuccess = 0, globalgenericFail = 0, globalmovieSuccess = 0, globalmovieFail = 0, globalarchiveSuccess = 0, globalarchiveFail = 0, globalarchiveSkip =0, globalnewArchivedCount = 0, globalupdatedCount = 0;
     Source source;
     Set<File> filesArchivedFromThisSource;
     public Archiver(Source source)
@@ -129,6 +130,7 @@ public class Archiver implements Runnable, Constants
                     tvSuccess, tvFail,
                     movieSuccess, movieFail,
                     musicVideoSuccess, musicVideoFail,
+                    genericSuccess, genericFail,
                     newArchivedCount, updatedCount, archiveSuccess, archiveSkip, archiveFail);
 
         }
@@ -142,9 +144,10 @@ public class Archiver implements Runnable, Constants
         }
     }
 
+	//AngryCamel - 20120817 1620 - Added generic
     private static void summarize(String subfName, int tvSuccess, int tvFail, int movieSuccess, int movieFail, 
-            int musicVideoSuccess, int musicVideoFail, int newArchivedCount, int updatedCount, int archiveSuccess,
-            int archiveSkip, int archiveFail)
+            int musicVideoSuccess, int musicVideoFail, int genericSuccess, int genericFail, int newArchivedCount, 
+            int updatedCount, int archiveSuccess, int archiveSkip, int archiveFail)
     {
         //try{subfName = subfName.substring(0, subfName.indexOf("/"));}catch(Exception ignored){}//try to trim to only the source name
         setShortLogDesc("Summary:"+subfName);
@@ -152,6 +155,10 @@ public class Archiver implements Runnable, Constants
         log(NOTICE, "TV Success: "+ tvSuccess+", TV Fail: "+ tvFail);
         log(NOTICE, "Movie Success: "+ movieSuccess+", Movie Fail: "+ movieFail);
         log(NOTICE, "Music Video Success: "+ musicVideoSuccess+", Music Video Fail: "+ musicVideoFail);
+        
+    	//AngryCamel - 20120817 1620 - Added generic
+        log(NOTICE, "Generic Success: "+ genericSuccess+", Generic Fail: "+ genericFail);
+        
         log(NOTICE, "New videos archived: "+ newArchivedCount +", existing videos updated: "+ updatedCount);
         log(NOTICE, "Overall: Success: "+ archiveSuccess+", Skip: "+ archiveSkip +", Fail: "+ archiveFail);
         setShortLogDesc("");
@@ -168,6 +175,11 @@ public class Archiver implements Runnable, Constants
             globalmovieSuccess += movieSuccess;
             globalmusicVideoFail += musicVideoFail;
             globalmusicVideoSuccess += musicVideoSuccess;
+
+        	//AngryCamel - 20120817 1620 - Added generic
+            globalgenericFail += musicVideoFail;
+            globalgenericSuccess += genericSuccess;
+            
             globaltvFail += tvFail;
             globaltvSuccess += tvSuccess;
         }
@@ -176,7 +188,8 @@ public class Archiver implements Runnable, Constants
     final static String GLOBAL_SUMMARY_NAME = "---Overall---";
     public static void globalSummary()
     {
-        summarize(GLOBAL_SUMMARY_NAME, globaltvSuccess, globaltvFail, globalmovieSuccess, globalmovieFail, globalmusicVideoSuccess, globalmusicVideoFail, globalnewArchivedCount, globalupdatedCount, globalarchiveSuccess, globalarchiveSkip, globalarchiveFail);
+        summarize(GLOBAL_SUMMARY_NAME, globaltvSuccess, globaltvFail, globalmovieSuccess, globalmovieFail, globalmusicVideoSuccess, globalmusicVideoFail, 
+        		globalgenericSuccess, globalgenericFail, globalnewArchivedCount, globalupdatedCount, globalarchiveSuccess, globalarchiveSkip, globalarchiveFail);
     }
 
     public void archiveVideo(XBMCFile video)
@@ -308,6 +321,9 @@ public class Archiver implements Runnable, Constants
         if(video.isTvShow()) if(success) tvSuccess++; else tvFail++;
         else if(video.isMovie()) if(success) movieSuccess++; else movieFail++;
         else if(video.isMusicVideo()) if(success) musicVideoSuccess++; else musicVideoFail++;
+
+    	//AngryCamel - 20120817 1620 - Added generic
+        else if(video.isGeneric()) if(success) genericSuccess++; else genericFail++;
 
         if(success && !video.isDuplicate())
         {
@@ -460,6 +476,14 @@ public class Archiver implements Runnable, Constants
             log(DEBUG, "Attempting to parse movie title using default settings. Setting movie title to \""+video.getFileLabel()+"\"");
             video.setTitle(video.getFileLabel());
         }
+    	//AngryCamel - 20120817 1620 - Added generic
+        else if(video.isGeneric())
+        {
+            log(DEBUG, "Attempting to parse generic video using default settings. Setting video title to \""+video.getFileLabel()+"\"");
+            video.setTitle(video.getFileLabel());
+        	//AngryCamel - 20120817 1620 - Added generic
+        	applyCustomParser(video);
+        }
         else//not yet supported
         {
             setShortLogDesc("Archive:Skip");
@@ -550,10 +574,10 @@ public class Archiver implements Runnable, Constants
 
     public static String getDroboxDestNoExt(XBMCFile file)
     {
-        return getDroboxDestNoExt(Config.DROPBOX, file);//default dropbox
+        return getDropboxDestNoExt(Config.DROPBOX, file);//default dropbox
     }
     
-    public static String getDroboxDestNoExt(String dropbox, XBMCFile file)
+    public static String getDropboxDestNoExt(String dropbox, XBMCFile file)
     {
         //determine new location, make sure directory structure is there
 
@@ -620,6 +644,30 @@ public class Archiver implements Runnable, Constants
                 musicVideoDir.mkdir();
             }
             return musicVideoDir+SEP+ tools.safeFileName(file.getArtist() + " - "+ file.getTitle());
+        }
+    	//AngryCamel - 20120817 1620 - Added generic
+        else if(file.isGeneric())
+        {
+            //create the directory structure, if needed
+            File genericDir = new File(dropbox+SEP+"Generic");
+            if(!genericDir.isDirectory())
+            {
+                log(INFO, "Creating base Generic directory at: " + genericDir);
+                genericDir.mkdir();
+            }
+
+            File seriesDir = new File(genericDir+SEP+tools.spacesToDots(tools.safeFileName(file.getSeries())));//safe name replaces spaces with periods
+            if(!seriesDir.isDirectory())
+            {
+                log(DEBUG, "Creating series directory at " + seriesDir);
+                seriesDir.mkdir();
+            }
+
+            //final file location
+            String baseDestination = seriesDir +SEP+ tools.safeFileName(file.getSeries());
+            if(valid(file.getTitle())) baseDestination += " - "+ tools.safeFileName(file.getTitle());
+
+            return baseDestination;
         }
         else
         {
@@ -729,9 +777,10 @@ public class Archiver implements Runnable, Constants
                 return false;//assume its not alrady archived
             }
         }
-        else if(file.isMovie() || file.isMusicVideo())
+    	//AngryCamel - 20120817 1620 - Added generic
+        else if(file.isMovie() || file.isMusicVideo() || file.isGeneric())
         {
-            return false;//dont have a good identifier (like SxxExx) for movies/music vids, so alwasy allow these to be archived/updated
+            return false;//dont have a good identifier (like SxxExx) for movies/music/generic vids, so alwasy allow these to be archived/updated
         }
         else
         {
@@ -796,14 +845,21 @@ public class Archiver implements Runnable, Constants
         }
         else//try secondary method, lookingup on TheTVDB.com
         {
-            //check if the series and title are both in the file label
-            if(getSeriesAndTitleFromFileLabel(video))
+        	//AngryCamel - 20120817 1620 - Added generic
+        	if(applyCustomParser(video))
+        	{
+        	    log(DEBUG, "Found series \""+video.getSeries() +"\", and title \""+video.getTitle()+"\", from file label \""+video.getFileLabel()+"\" using a custom parser. "
+        	    	            + "Will use this info to look up on the TVDB.com");
+        	    return TVDB.lookupTVShow(video);
+        	}
+        	
+        	if(getSeriesAndTitleFromFileLabel(video)) //check if the series and title are both in the file label
             {
                 log(DEBUG, "Found series \""+video.getSeries() +"\", and title \""+video.getTitle()+"\", from file label \""+video.getFileLabel()+"\". "
                         + "Will use this info to look up on the TVDB.com");
                 return TVDB.lookupTVShow(video);
             }
-            else//assume that the file label is the episode title
+            else //assume that the file label is the episode title
             {
                 video.setTitle(video.getFileLabel());
                 log(DEBUG, "Assuming that the file label is the episode title: \""+video.getTitle()+"\", finding Series by looking at parent folder(s)");
@@ -819,6 +875,52 @@ public class Archiver implements Runnable, Constants
                 }
             }
         }
+    }
+
+  	//AngryCamel - 20120815 2246
+  	//   If a custom parser is not present, then continue on to default parsing.
+  	//   If it was present but doesn't find a match (it will return out if it does),
+  	//     then continue on to default parsing.
+  	//   Expected XML format of the config section for this is:
+	//     <!--Parse the series name then the title of the episode -->
+	//     <parser>
+	//         <regexp>([\w\s*'-]*):([\w\s*'-]*)</regexp> <!-- ex: "Show Name: Title of the Episode" -->
+	//     </parser>
+	 public boolean applyCustomParser(XBMCFile video)
+	 {
+
+     	if(video.getSubfolder().shouldApplyParser())
+     	{
+             log(DEBUG, "Found custom series and title parser.");
+     		//Info: Structure of parsers = {"regexp":["pattern1","pattern2"]}
+             for(Map.Entry<String,List<String>> entry : video.getSubfolder().parsers.entrySet())
+             {
+                 String type = entry.getKey();
+                 if(type==null) continue;//skip
+                 List<String> parserStrings = entry.getValue();
+                 for(String parserString : parserStrings)
+                 {
+                     if(type.equalsIgnoreCase(Constants.REGEXP))
+                     {
+                         log(DEBUG, "Custom series and title parser regex: "+parserString);
+                         Pattern p = Pattern.compile(parserString, Pattern.CASE_INSENSITIVE);
+                         Matcher m = p.matcher(video.getFileLabel());
+                         if(m.find())
+                         {
+                         	if (m.groupCount() == 2)
+                         	{
+                         		//First group is assumed to be the series
+                                 video.setSeries(m.group(1).trim());
+                             	//Second group is assumed to be the title
+                                 video.setTitle(m.group(2).trim());
+                                 return true;
+                         	}
+                         }
+                     }
+                 }
+			}
+     	}
+     	return false;
     }
 
     public static boolean addTVMetaDataFromSxxExx(XBMCFile video, String seasonEpisodeNaming)

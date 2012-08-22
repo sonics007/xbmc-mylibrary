@@ -190,7 +190,7 @@ public class Database implements Constants
                         stmt.setObject(i, p.param);//nulls may not work here depending on database
                     }
                 }
-                Config.log(DEBUG, "Set param "+ i +" to "+ p.param);
+                //Config.log(DEBUG, "Set param "+ i +" to "+ p.param);
                 i++;
             }
         }

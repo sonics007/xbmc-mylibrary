@@ -50,7 +50,7 @@ public class Filter
 					int runtimeFilter = 0;
 					String operator = "";
 					
-					splitFilterStr = filterString.toLowerCase().split("|");
+					splitFilterStr = filterString.toLowerCase().split("\\|");
 					if(splitFilterStr.length < 2)
 						return false;//filter string format invalid
 					
@@ -62,7 +62,7 @@ public class Filter
 						return false;//filter string format invalid
 					}
 					
-					if(operator.equals("EQ"))
+					if(operator.equals("eq"))
 					{
 						//Handle Equal To check here
 						if(runtime == runtimeFilter)
@@ -74,7 +74,7 @@ public class Filter
 							return false;
 						}
 					}
-					else if(operator.equals("GT"))
+					else if(operator.equals("gt"))
 					{
 						//Handle Greater Than check here
 						if(runtime > runtimeFilter)
@@ -86,7 +86,7 @@ public class Filter
 							return false;
 						}
 					}
-					else if(operator.equals("LT"))
+					else if(operator.equals("lt"))
 					{
 						//Handle Less Than check here
 						if(runtime < runtimeFilter)
@@ -98,7 +98,7 @@ public class Filter
 							return false;
 						}
 					}
-					else if(operator.equals("NE"))
+					else if(operator.equals("ne"))
 					{
 						//Handle Not Equal To check here
 						if(runtime != runtimeFilter)
@@ -110,7 +110,7 @@ public class Filter
 							return false;
 						}
 					}
-					else if(operator.equals("GE"))
+					else if(operator.equals("ge"))
 					{
 						//Handle Greater than or equal to check here
 						if(runtime >= runtimeFilter)
@@ -122,7 +122,7 @@ public class Filter
 							return false;
 						}
 					}
-					else if(operator.equals("LE"))
+					else if(operator.equals("le"))
 					{
 						//Handle Less than or equal to check here
 						if(runtime <= runtimeFilter)

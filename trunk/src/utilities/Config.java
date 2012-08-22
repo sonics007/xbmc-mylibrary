@@ -147,10 +147,10 @@ public class Config implements Constants
                 
 
          //populate charactes that we do not allow in file names
-        char[] specialChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '*', '~', 'â€™'};
+        char[] specialChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '*', '~', '™'};
         for(char c : specialChars) ILLEGAL_FILENAME_CHARS.put(new Integer((int) c), "illegal");
 
-        char[] uncommonChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '#', '$', '%', '^', '*', '!', '~','\'', 'â€™', '=', '[' ,']', '(', ')', ';', '\\' ,',', '_'};
+        char[] uncommonChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '#', '$', '%', '^', '*', '!', '~','\'', '™', '=', '[' ,']', '(', ')', ';', '\\' ,',', '_'};
         for(char c : uncommonChars) UNCOMMON_CHARS.put(new Integer((int) c), "illegal");
 
         //set up logs
@@ -631,7 +631,6 @@ public class Config implements Constants
                 log(DEBUG, "Comskip edl type set to: "+ EDL_TYPE);
             }             
             */
-
             
             //get SearchFilters
             Element searchFilters = root.getChild("SearchFilters");
@@ -729,6 +728,13 @@ public class Config implements Constants
                         String suffix = (inherit("suffix", sourceElement, subfolder));
                         int level_deep = Integer.parseInt(subfolder.getAttributeValue("level_deep"));
                         //String compression = (inherit("compression", sourceElement, subfolder));
+                        
+                    	//AngryCamel - 20120817 1620
+                        //force_series will override any parsed series name with the value specified
+                        //The reason this was developed was for TED talks. I did not spend much time 
+                        // thinking about it's possible usage outside of that particular use
+                        // case, but I'm sure someone will find another reason to use it.
+                        String force_series = (inherit("force_series", sourceElement, subfolder));
 
                         Subfolder subf = new Subfolder(src, subfolderName);
                         subf.setRecursive(recursive);
@@ -745,13 +751,16 @@ public class Config implements Constants
                         subf.setLevelDeep(level_deep);
                         //subf.setCompression(compression);
 
+                    	//AngryCamel - 20120817 1620
+                        subf.setForceSeries(force_series);
+
                         String indent = "";
                         for(int i=subf.getLevelDeep(); i>=0; i--)indent+="\t";
                             
                         Config.log(INFO, indent+"Next Subfolder: name="+subf.getFullName()+", recursive="+subf.isRecursive()
                                 +", type="+subf.getType()+", max_series="+subf.getMaxSeries()+", "
                                 + "max_videos="+subf.getMaxVideos()+", movie_set="+subf.getMovieSet()+", prefix="+subf.getPrefix()+", suffix="+subf.getSuffix()+
-                                /*", download="+download+", compression="+(valid(compression) ? compression:"")+*/", multi_part="+containsMultiPartVideos);
+                                /*", download="+download+", compression="+(valid(compression) ? compression:"")+*/", multi_part="+containsMultiPartVideos +", force_series="+subf.getForceSeries());
 
                         //check for excludes/filters at the subfolder level
                         //inherit any excludes/filters from parent subfolders
@@ -785,6 +794,26 @@ public class Config implements Constants
                                 }
                             }
                         }
+                        
+                    	//AngryCamel - 20120815 2246
+                        //Parsers override the default series and title parser in Archiver.addTVMetaData()
+                        //If multiple parsers are supplied, the order that they are read
+                        // from the XML is the priority order they will be processed in
+                        // until one finds a match.
+                        for(Element nextSubf : subfolderAndParents)
+                        {
+                            Element parserElem = nextSubf.getChild("parser");
+                            if(parserElem != null)
+                            {
+                                List<Element> parsers = parserElem.getChildren();
+                                for(Element parser : parsers)
+                                {
+                                    subf.addParser(parser.getName(), parser.getText());
+                                    log(DEBUG, indent+"\tAdded subfolder Parser: type="+parser.getName()+", value="+parser.getText());
+                                }
+                            }
+                        }
+                        
                         src.addSubfolder(subf);
                     }//end subfolders
                 }//end top subfolders               

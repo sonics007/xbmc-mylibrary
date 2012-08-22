@@ -13,6 +13,11 @@ public class Subfolder implements Constants
     int numberofVideos = 0;
     public Map<String,List<String>> excludes = new LinkedHashMap<String,List<String>>();
     public Map<String,List<String>> filters = new LinkedHashMap<String,List<String>>();
+    
+	//AngryCamel - 20120815 2246
+    public Map<String,List<String>> parsers = new LinkedHashMap<String,List<String>>();
+    String force_series = null;
+    
     Source source;
     String regexMatchingName = null;//if the name is a regex, this will be set to what the regex matches
     boolean canContainMultiPartVideos = false;
@@ -28,6 +33,16 @@ public class Subfolder implements Constants
         this.source = source;
     }
 
+	//AngryCamel - 20120815 2246
+    public void setForceSeries(String series)
+    {
+        this.force_series = series;
+    }
+    public String getForceSeries()
+    {
+        return force_series;
+    }
+    
     public void setLevelDeep(int level)
     {
         this.level_deep = level;
@@ -137,6 +152,11 @@ public class Subfolder implements Constants
     {
         return !filters.isEmpty();
     }
+	//AngryCamel - 20120815 2246
+    public boolean shouldApplyParser()
+    {
+        return !parsers.isEmpty();
+    }
     public void addExclude(String type, String value)
     {
         List<String> values = excludes.get(type);
@@ -150,6 +170,14 @@ public class Subfolder implements Constants
         if(values == null) values = new ArrayList<String>();
         values.add(value);
         filters.put(type, values);
+    }
+	//AngryCamel - 20120815 2246
+    public void addParser(String type, String value)
+    {
+        List<String> values = parsers.get(type);
+        if(values == null) values = new ArrayList<String>();
+        values.add(value);
+        parsers.put(type, values);
     }
     public void setMovieSet(String movieSet)
     {
@@ -336,13 +364,12 @@ public class Subfolder implements Constants
         return false;//no match
     }
 
-       /*
+     /*
      * Checks the path against the filters.
      * Returns true if it is allowed by ALL filters or filter matching is not used
      * Returns false if this path should be skipped
      */
 	//AngryCamel - 20120805 2351
-    // public boolean isAllowedByFilters(String path)
 	public boolean isAllowedByFilters(String path, int runtime)
     {
         path = Config.escapePath(path);

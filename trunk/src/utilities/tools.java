@@ -494,6 +494,12 @@ public class tools implements Constants
                                 table = "musicvideo";
                                 idField = "idMVideo";
                             }
+                        	//AngryCamel - 20120817 1620 - Added generic
+                            else if(videoType.equals(GENERIC))
+                            {
+                                Config.log(WARNING,"Generic video type does not update meta data");
+                                return false;
+                            }
                             else
                             {
                                 Config.log(WARNING,"Unknown video type: \""+ videoType+"\", will not update meta data");
@@ -612,6 +618,10 @@ public class tools implements Constants
                         changed = video.getYear() != currentlyArchivedFile.year;
                     else if(video.isMusicVideo())
                         changed = !video.getArtist().equals(currentlyArchivedFile.artist);
+                	//AngryCamel - 20120817 1620 - Added generic
+                    else if(video.isGeneric())
+                        changed = !video.getSeries().equals(currentlyArchivedFile.series)
+                        		|| !video.getTitle().equals(currentlyArchivedFile.title);
                 }                    
             }
             if(!changed)

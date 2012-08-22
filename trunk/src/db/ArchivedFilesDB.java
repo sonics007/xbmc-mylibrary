@@ -105,9 +105,16 @@ public class ArchivedFilesDB extends SQLiteDB
                 {
                     video.setArtist(rs.getString("artist"));
                 }
+            	//AngryCamel - 20120817 1620 - Added generic
+                else if(video.isGeneric())
+                {
+                    video.setSeries(rs.getString("series"));
+                    video.setArtist(rs.getString("artist"));
+                    video.setEpisodeNumber(rs.getInt("episode_number"));
+                }
                 else
                 {
-                    Config.log(WARNING, "Video type (TV/Movie/Music Video) cannot be determined using: "+preparedStmtSQL);
+                    Config.log(WARNING, "Video type (TV/Movie/Music Video/Generic) cannot be determined using: "+preparedStmtSQL);
                     return null;
                 }
                 String dropboxLocation = rs.getString("dropbox_location");//always a .strm out of the database                                

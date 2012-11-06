@@ -4,6 +4,7 @@ package db;
 import java.sql.*;
 import utilities.Config;
 
+import static utilities.Constants.*;
 
 public class SQLiteDB extends Database
 {
@@ -35,7 +36,7 @@ public class SQLiteDB extends Database
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to determine if table \""+tablename+"\" has column named \""+columnName+"\"",x);
+            Logger.ERROR( "Failed to determine if table \""+tablename+"\" has column named \""+columnName+"\"",x);
             return false;
         }
         finally

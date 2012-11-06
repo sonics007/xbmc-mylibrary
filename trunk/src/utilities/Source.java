@@ -3,7 +3,7 @@ package utilities;
 import java.io.File;
 import java.util.*;
 
-public class Source implements Constants
+public class Source
 {
 
     final String name;//name should not be changed after the constructor. It is used in the equals comparison

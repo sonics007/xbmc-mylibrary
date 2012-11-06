@@ -2,46 +2,68 @@ package utilities;
 
 import java.util.*;
 
+import static utilities.Constants.*;
 
-public class Subfolder implements Constants
+public class Subfolder
 {
-    boolean recursive = false, forceTVDB=false, regexName = false;;
-    String type = AUTO_TYPE,movie_set, prefix, suffix;
-    String name;
-    int maxSeries =-1, maxVideos =-1;
-    Set<String> series = new HashSet<String>();
-    int numberofVideos = 0;
+    Source source;
     public Map<String,List<String>> excludes = new LinkedHashMap<String,List<String>>();
     public Map<String,List<String>> filters = new LinkedHashMap<String,List<String>>();
     
-	//AngryCamel - 20120815 2246
+    //AngryCamel - 20120815 2246
     public Map<String,List<String>> parsers = new LinkedHashMap<String,List<String>>();
-    String force_series = null;
+    String force_series = null;    
     
-    Source source;
+    int numberofVideos = 0; 
+    String movie_set, prefix, suffix;
+    
+    boolean forceTVDB=false,regexName = false;
+        boolean recursive = false;
+
+    int maxSeries =-1, maxVideos =-1;
+    Set<String> series = new HashSet<String>();
+    
     String regexMatchingName = null;//if the name is a regex, this will be set to what the regex matches
     boolean canContainMultiPartVideos = false;
+    List<String> movie_tags;
     
-    //Downloading support has been removed
-    //private boolean download = false;//download instead of stream
+        
+     String type = AUTO_TYPE;    
+    public String name;    
+           	        
+    
     private int level_deep;
-    String compression;
+    
+    
+    public Subfolder(String name)
+    {
+        this.name = name;        
+    }
     
     public Subfolder(Source source, String name)
     {
-        this.name = name;
+        this(name);
         this.source = source;
     }
+    
+    public Source getSource()
+    {
+        return source;
+    }
+    
+    
+    /*
+     * includes parent source name
+     */
+    public String getFullName()
+    {
+        return source.getName()+"/"+getName();
+    }
+    public String getFullNameClean()
+    {
+        return source.getName()+"/"+getCleanName();
+    }
 
-	//AngryCamel - 20120815 2246
-    public void setForceSeries(String series)
-    {
-        this.force_series = series;
-    }
-    public String getForceSeries()
-    {
-        return force_series;
-    }
     
     public void setLevelDeep(int level)
     {
@@ -51,26 +73,60 @@ public class Subfolder implements Constants
     {
         return level_deep;
     }
+              
+    public void setType(String type)
+    {
+        this.type = type;
+    }
+
     /*
-    public void setDownload(boolean download)
+     * Name of the subfolder only, no parent name is included
+     */
+    public String getName()
     {
-        this.download =download;
-    }     
-     
-    public boolean download()
-    {
-        return download;
-    }    
-    public void setCompression(String compression)
-    {
-        this.compression = compression;
+        return name;
     }
-    public String getCompression()
+
+    public String getType()
     {
-        return compression;
+        return type;
     }
-    */     
     
+    public void setRecursive(boolean recursive)
+    {
+        this.recursive = recursive;
+    }
+
+    public boolean isRecursive()
+    {
+        return recursive;
+    }
+    public boolean shouldExclude()
+    {
+        return !excludes.isEmpty() || !Exclude.globalExcludes.isEmpty();
+    }
+    public boolean shouldFilter()
+    {
+        return !filters.isEmpty();
+    }
+    	//AngryCamel - 20120815 2246
+    public void setForceSeries(String series)
+    {
+        this.force_series = series;
+    }
+    public String getForceSeries()
+    {
+        return force_series;
+    }
+    
+    public void setForceTVDB(boolean forceTVDB)
+    {
+        this.forceTVDB =forceTVDB;
+    }
+    public boolean forceTVDBLookup()
+    {
+        return forceTVDB;
+    }
     public boolean canContainMultiPartVideos()
     {
         return canContainMultiPartVideos;
@@ -79,11 +135,7 @@ public class Subfolder implements Constants
     {
         this.canContainMultiPartVideos =canContainMultiPartVideos;
     }
-    
-    public Source getSource()
-    {
-        return source;
-    }
+        
     public void setRegexName(boolean regexName)
     {
         this.regexName = regexName;
@@ -96,13 +148,156 @@ public class Subfolder implements Constants
     {
         return regexName;
     }
-    public void setForceTVDB(boolean forceTVDB)
+        /*
+     * Returns the name that the regex matched if regex was used
+     */
+    public String getCleanName()
     {
-        this.forceTVDB =forceTVDB;
+        if(isRegexName() && regexMatchingName != null)
+            return regexMatchingName;
+        else
+            return name;
     }
-    public boolean forceTVDBLookup()
+    
+      /*
+     * Checks if thie path is inside the subfolder. Allowes for x levels deep inside subfolder if recursive is true.
+     * Otherwise, path must be an exact match of the subfolder
+     */
+    public boolean pathMatches(String folderPath)
     {
-        return forceTVDB;
+        folderPath = Config.escapePath(folderPath);
+        if(isRecursive())
+        {
+            boolean match;
+            String nameToUse;
+            if(isRegexName())//get the regex matchign string and use that to compare .startsWith
+               nameToUse = tools.getRegexMatch(getFullName(), folderPath);
+            else//regular .startsWith using the name
+                nameToUse = getFullName();
+            
+            //check if the folder path starts with the name of this subfolder, in which case, a recursive match is true. the folder path is below or at the same level as this subfolder
+            match =  nameToUse != null && folderPath.toLowerCase().startsWith(nameToUse.toLowerCase());
+            
+            /*
+             * //Uncommend this if need to debug recursive matching
+            Logger.DEBUG((isRegexName() ? "Regex" :"Regular")+" recursive match ? "+ match +": "
+                                +folderPath.toLowerCase() + " ["+(!match ? "does not start with" : "starts with")+"] "
+                                + (nameToUse==null ? getFullName() : nameToUse).toLowerCase());             
+             */
+            return match;
+        }
+        else//not recursive, only exact matches are allowed
+        {            
+            return pathMatchesExactly(folderPath);
+        }
+    }
+
+    public boolean pathMatchesExactly(String folderPath)
+    {
+        folderPath = Config.escapePath(folderPath);
+        boolean exactMatch;
+        String nameToUse;
+        if(isRegexName())        
+            nameToUse = tools.getRegexMatch(getFullName(), folderPath);//get matching regex string for the name
+        else
+            nameToUse = getFullName();//normal name
+
+        exactMatch = nameToUse != null && nameToUse.equalsIgnoreCase(folderPath);//case insensitive
+        
+        Logger.DEBUG("Exact match = " + exactMatch +" for "+ (isRegexName() ? "regex" : "regular")+" match. "
+                + "Checked if Subfolder: \""+(nameToUse==null ? getFullName() : nameToUse)+"\" "+(isRegexName() ? "matches" : "=") +" \""+folderPath+"\"");
+        
+        return exactMatch;
+    }
+
+    /*
+     * Check if we need to dig deeper in order to get into the subfolder. Means this path is an ancestor of the subfolder
+     */
+    public boolean digDeeper(String folderPath)
+    {
+        folderPath = Config.escapePath(folderPath);
+        {
+            boolean match =false;
+            String regexMatch = null;
+            if(isRegexName())
+            {
+                
+                //get seperate folders
+                String[] folders = getFullName().split("/");
+                for(int i=folders.length-1;i>=0;i--)
+                {
+                    String nameToCheck = "";
+                    for(int z = i; z>=0; z--)//start with full name and move up, checking each folder for a regex starts with folderpath
+                        nameToCheck = folders[z] + (nameToCheck.isEmpty() ? "" :"/"+nameToCheck);                    
+
+                    boolean regexMatches = tools.regexMatch(nameToCheck, folderPath);
+                    //Logger.DEBUG("DigDeeper Regex match ? "+ regexMatches +": \""+nameToCheck + "\" ["+(regexMatches ? "matches" : "does not match")+"] \""+folderPath+"\"");
+                    if(regexMatches)
+                    {
+                        regexMatch = tools.getRegexMatch(nameToCheck, folderPath);
+                        match = regexMatch.toLowerCase().startsWith(folderPath.toLowerCase());
+                        break;
+                    }
+                    else
+                    {
+                        regexMatch =  "<no regex match on " + nameToCheck+">";
+                        match = false;//no regex match
+                    }
+                }
+            }
+            else//regular, non-regex match
+            {
+                match = getFullName().toLowerCase().startsWith(folderPath.toLowerCase());
+                //Logger.DEBUG("DigDeeper ? "+ match +": "+getFullName().toLowerCase() + " ["+(!match ? "does not start" : "starts")+" with] "+folderPath.toLowerCase());
+            }
+
+            
+            if(match)
+            {
+                //Logger.DEBUG( "Dig deeper=true for Subfolder: "+ getFullName() + ", current level = "+ folderPath);
+                return true;//sourceName is a folder deeper in the source (recursive match)
+            }
+        }
+        return false;//no match
+    }
+
+     /*
+     * Checks the path against the filters.
+     * Returns true if it is allowed by ALL filters or filter matching is not used
+     * Returns false if this path should be skipped
+     */
+	//AngryCamel - 20120805 2351
+	public boolean isAllowedByFilters(String path, int runtime)
+    {
+        path = Config.escapePath(path);
+       //check against filters
+       boolean shouldFilter = shouldFilter();
+       boolean filterMatch = true;//default
+       if(shouldFilter)
+           filterMatch = Filter.FilterMatch(path, runtime, filters); //AngryCamel - 20120805 2351
+        if(!filterMatch)
+        {
+            Logger.DEBUG( "Skipping this path because it doesn't match any filters: "+ path);
+            return false;
+        }
+
+       return true;//all checks passed
+    }
+
+    public boolean isExcluded(String path)
+    {
+        path = Config.escapePath(path);
+       //check against excludes
+       boolean shouldExclude = shouldExclude();     
+       boolean exclude = false;//default
+       if(shouldExclude)
+           exclude = Exclude.exclude(path, excludes);//also checks global excludes
+        if(exclude)
+        {
+            Logger.DEBUG( "Skipping this path because it matches an exclude: "+ path);
+            return true;
+        }
+       return false;//all checks passed, not excluded
     }
 
     
@@ -131,7 +326,7 @@ public class Subfolder implements Constants
     {
         series.add(seriesName);
     }
-    public void addVideo(XBMCFile video)
+    public void addVideo(MyLibraryFile video)
     {
         numberofVideos++;
         if(video.isTvShow()) addSeries(video.getSeries());//only increments if series is new
@@ -144,14 +339,7 @@ public class Subfolder implements Constants
     {
         return numberofVideos; 
     }
-    public boolean shouldExclude()
-    {
-        return !excludes.isEmpty() || !Exclude.globalExcludes.isEmpty();
-    }
-    public boolean shouldFilter()
-    {
-        return !filters.isEmpty();
-    }
+    
 	//AngryCamel - 20120815 2246
     public boolean shouldApplyParser()
     {
@@ -182,6 +370,31 @@ public class Subfolder implements Constants
     public void setMovieSet(String movieSet)
     {
         this.movie_set = movieSet;
+    }
+    public void setMovieTags(List<String> movieTags)
+    {
+        this.movie_tags = movieTags;
+    }
+    public List<String> getMovieTags(){
+        return movie_tags;
+    }
+    public String getMovieTagsAsString(){
+        if(!hasMovieTags())
+            return "";
+        if(getMovieTags().size() == 1)
+            return getMovieTags().get(0);
+        else{
+            String tags = "";
+            for(Iterator<String> it = getMovieTags().iterator(); it.hasNext();)
+            {
+                tags += it.next();
+                if(it.hasNext()) tags += "|";//pipe delimited
+            }
+            return tags;
+        }
+    }
+    public boolean hasMovieTags(){
+        return this.movie_tags != null && !this.movie_tags.isEmpty();
     }
     public String getMovieSet()
     {
@@ -219,188 +432,4 @@ public class Subfolder implements Constants
     {
         return maxVideos;
     }
-    
-    public void setType(String type)
-    {
-        this.type = type;
-    }
-    public void setRecursive(boolean recursive)
-    {
-        this.recursive = recursive;
-    }
-
-    /*
-     * includes parent source name
-     */
-    public String getFullName()
-    {
-        return source.getName()+"/"+getName();
-    }
-    public String getFullNameClean()
-    {
-        return source.getName()+"/"+getCleanName();
-    }
-    /*
-     * Name of the subfolder only, no parent name is included
-     */
-    public String getName()
-    {
-        return name;
-    }
-    /*
-     * Returns the name that the regex matched if regex was used
-     */
-    public String getCleanName()
-    {
-        if(isRegexName() && regexMatchingName != null)
-            return regexMatchingName;
-        else
-            return name;
-    }
-    public String getType()
-    {
-        return type;
-    }
-    public boolean isRecursive()
-    {
-        return recursive;
-    }
-
-    /*
-     * Checks if thie path is inside the subfolder. Allowes for x levels deep inside subfolder if recursive is true.
-     * Otherwise, path must be an exact match of the subfolder
-     */
-    public boolean pathMatches(String folderPath)
-    {
-        folderPath = Config.escapePath(folderPath);
-        if(isRecursive())
-        {
-            boolean match;
-            String nameToUse;
-            if(isRegexName())//get the regex matchign string and use that to compare .startsWith
-               nameToUse = tools.getRegexMatch(getFullName(), folderPath);
-            else//regular .startsWith using the name
-                nameToUse = getFullName();
-            
-            //check if the folder path starts with the name of this subfolder, in which case, a recursive match is true. the folder path is below or at the same level as this subfolder
-            match =  nameToUse != null && folderPath.toLowerCase().startsWith(nameToUse.toLowerCase());
-            Config.log(DEBUG,(isRegexName() ? "Regex" :"Regular")+" recursive match ? "+ match +": "
-                                +folderPath.toLowerCase() + " ["+(!match ? "does not start with" : "starts with")+"] "
-                                + (nameToUse==null ? getFullName() : nameToUse).toLowerCase());
-            return match;
-        }
-        else//not recursive, only exact matches are allowed
-        {            
-            return pathMatchesExactly(folderPath);
-        }
-    }
-
-    public boolean pathMatchesExactly(String folderPath)
-    {
-        folderPath = Config.escapePath(folderPath);
-        boolean exactMatch;
-        String nameToUse;
-        if(isRegexName())        
-            nameToUse = tools.getRegexMatch(getFullName(), folderPath);//get matching regex string for the name
-        else
-            nameToUse = getFullName();//normal name
-
-        exactMatch = nameToUse != null && nameToUse.equalsIgnoreCase(folderPath);//case insensitive
-        
-        Config.log(DEBUG,"Exact match = " + exactMatch +" for "+ (isRegexName() ? "regex" : "regular")+" match. "
-                + "Checked if Subfolder: \""+(nameToUse==null ? getFullName() : nameToUse)+"\" "+(isRegexName() ? "matches" : "=") +" \""+folderPath+"\"");
-        
-        return exactMatch;
-    }
-
-    /*
-     * Check if we need to dig deeper in order to get into the subfolder. Means this path is an ancestor of the subfolder
-     */
-    public boolean digDeeper(String folderPath)
-    {
-        folderPath = Config.escapePath(folderPath);
-        {
-            boolean match =false;
-            String regexMatch = null;
-            if(isRegexName())
-            {
-                
-                //get seperate folders
-                String[] folders = getFullName().split("/");
-                for(int i=folders.length-1;i>=0;i--)
-                {
-                    String nameToCheck = "";
-                    for(int z = i; z>=0; z--)//start with full name and move up, checking each folder for a regex starts with folderpath
-                        nameToCheck = folders[z] + (nameToCheck.isEmpty() ? "" :"/"+nameToCheck);                    
-
-                    boolean regexMatches = tools.regexMatch(nameToCheck, folderPath);
-                    //Config.log(DEBUG,"DigDeeper Regex match ? "+ regexMatches +": \""+nameToCheck + "\" ["+(regexMatches ? "matches" : "does not match")+"] \""+folderPath+"\"");
-                    if(regexMatches)
-                    {
-                        regexMatch = tools.getRegexMatch(nameToCheck, folderPath);
-                        match = regexMatch.toLowerCase().startsWith(folderPath.toLowerCase());
-                        break;
-                    }
-                    else
-                    {
-                        regexMatch =  "<no regex match on " + nameToCheck+">";
-                        match = false;//no regex match
-                    }
-                }
-            }
-            else//regular, non-regex match
-            {
-                match = getFullName().toLowerCase().startsWith(folderPath.toLowerCase());
-                //Config.log(DEBUG,"DigDeeper ? "+ match +": "+getFullName().toLowerCase() + " ["+(!match ? "does not start" : "starts")+" with] "+folderPath.toLowerCase());
-            }
-
-            
-            if(match)
-            {
-                //Config.log(DEBUG, "Dig deeper=true for Subfolder: "+ getFullName() + ", current level = "+ folderPath);
-                return true;//sourceName is a folder deeper in the source (recursive match)
-            }
-        }
-        return false;//no match
-    }
-
-     /*
-     * Checks the path against the filters.
-     * Returns true if it is allowed by ALL filters or filter matching is not used
-     * Returns false if this path should be skipped
-     */
-	//AngryCamel - 20120805 2351
-	public boolean isAllowedByFilters(String path, int runtime)
-    {
-        path = Config.escapePath(path);
-       //check against filters
-       boolean shouldFilter = shouldFilter();
-       boolean filterMatch = true;//default
-       if(shouldFilter)
-           filterMatch = Filter.FilterMatch(path, runtime, filters); //AngryCamel - 20120805 2351
-        if(!filterMatch)
-        {
-            Config.log(DEBUG, "Skipping this path because it doesn't match any filters: "+ path);
-            return false;
-        }
-
-       return true;//all checks passed
-    }
-
-    public boolean isExcluded(String path)
-    {
-        path = Config.escapePath(path);
-       //check against excludes
-       boolean shouldExclude = shouldExclude();     
-       boolean exclude = false;//default
-       if(shouldExclude)
-           exclude = Exclude.exclude(path, excludes);//also checks global excludes
-        if(exclude)
-        {
-            Config.log(DEBUG, "Skipping this path because it matches an exclude: "+ path);
-            return true;
-        }
-       return false;//all checks passed, not excluded
-    }
-
 }

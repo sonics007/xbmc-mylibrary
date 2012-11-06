@@ -5,8 +5,9 @@ import java.util.List;
 import utilities.Config;
 import utilities.Constants;
 import utilities.Param;
+import static utilities.Constants.*;
 
-public class Database implements Constants
+public class Database
 {    
     Connection conn = null;
     boolean connectionClosed;    
@@ -41,7 +42,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Error instantiating DBConnection: "+x,x);
+            Logger.ERROR( "Error instantiating DBConnection: "+x,x);
         }
     }
     public boolean isMySQL()
@@ -61,7 +62,7 @@ public class Database implements Constants
         }
         catch(java.sql.SQLException x)
         {
-            Config.log(ERROR,"Cannot determine if Database is connected: "+x,x);
+            Logger.ERROR("Cannot determine if Database is connected: "+x,x);
             return false;
         }
     }    
@@ -78,7 +79,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {            
-            Config.log(ERROR,"Failed to get SQL Lite DB Connection to : "+ connectionPath,x);
+            Logger.ERROR("Failed to get SQL Lite DB Connection to : "+ connectionPath,x);
             conn = null;
         }                
     }
@@ -90,12 +91,12 @@ public class Database implements Constants
         {
             Class.forName("com.mysql.jdbc.Driver").newInstance();
             String s = "jdbc:mysql://"+SQL_SERVER+":"+PORT+"/"+DATABASE_NAME+"?user="+MYSQL_UN+"&password="+MYSQL_PW;
-            Config.log(DEBUG, "Setting mysql connections using: "+ s);
+            Logger.DEBUG( "Setting mysql connections using: "+ s);
             conn = DriverManager.getConnection(s);
         }
         catch (Exception ex)
         {
-            Config.log(ERROR, "MYSQL connection exception: " + ex.getMessage(),ex);
+            Logger.ERROR( "MYSQL connection exception: " + ex.getMessage(),ex);
             conn = null;
         }        
     }
@@ -111,7 +112,7 @@ public class Database implements Constants
         while(true)
         {            
             if(conn == null || connectionClosed){
-                Config.log(ERROR,"Connection has been closed and a statement cannot be created! Expect DB errors.");
+                Logger.ERROR("Connection has been closed and a statement cannot be created! Expect DB errors.");
                 return null;
             }
 
@@ -133,7 +134,7 @@ public class Database implements Constants
                 }
                 catch(Exception x)
                 {
-                    Config.log(ERROR, "Failed to create SQL statement: "+ x,x);
+                    Logger.ERROR( "Failed to create SQL statement: "+ x,x);
                     return null;
                 }
             }
@@ -141,7 +142,7 @@ public class Database implements Constants
             long secondWaited = (System.currentTimeMillis() - getStatementStart) / 1000;
             if(secondWaited > MAX_SECONDS_FOR_STATEMENT_EXECUTION)
             {
-                Config.log(WARNING, "Have waited " + (secondWaited) +" seconds for statement to finish. Will force it closed now.");
+                Logger.WARN( "Have waited " + (secondWaited) +" seconds for statement to finish. Will force it closed now.");
                 closeStatement();
             }
         }
@@ -156,7 +157,7 @@ public class Database implements Constants
         catch(Exception x)
         {
             //ignore if it fails to close
-            Config.log(WARNING, "Failed to close statement properly. This may lead to DB inconsistencies...",x);
+            Logger.WARN( "Failed to close statement properly. This may lead to DB inconsistencies...",x);
         }
         finally
         {
@@ -186,17 +187,17 @@ public class Database implements Constants
                         stmt.setTimestamp(i, p.param == null ? null : ((java.sql.Timestamp)p.param)); break;
                     default: 
                     {
-                        Config.log(ERROR, "Unknown param type: "+p.type+" for param: "+p.param+". Cannot set parameter");
+                        Logger.ERROR( "Unknown param type: "+p.type+" for param: "+p.param+". Cannot set parameter");
                         stmt.setObject(i, p.param);//nulls may not work here depending on database
                     }
                 }
-                //Config.log(DEBUG, "Set param "+ i +" to "+ p.param);
+                //Logger.DEBUG( "Set param "+ i +" to "+ p.param);
                 i++;
             }
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to set parameters for PreparedStatement: "+ x,x);            
+            Logger.ERROR( "Failed to set parameters for PreparedStatement: "+ x,x);            
         }
     }
     
@@ -210,7 +211,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to executeQuery for prepared statement: "+ x,x);
+            Logger.ERROR( "Failed to executeQuery for prepared statement: "+ x,x);
             return null;
         }
     }
@@ -228,7 +229,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(Config.ERROR, "Could not execute query: " + sql, x);
+            Logger.ERROR( "Could not execute query: " + sql, x);
         }
         finally
         {
@@ -250,7 +251,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(Config.ERROR, "Could not execute query: " + sql, x);
+            Logger.ERROR( "Could not execute query: " + sql, x);
         }
         finally
         {
@@ -272,7 +273,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(Config.ERROR, "Could not execute query: " + sql, x);
+            Logger.ERROR( "Could not execute query: " + sql, x);
             return SQL_ERROR;
         }
         finally
@@ -298,7 +299,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(Config.ERROR, "Could not execute query: " + sql, x);
+            Logger.ERROR( "Could not execute query: " + sql, x);
             return (long) SQL_ERROR;
         }
         finally
@@ -320,7 +321,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(Config.ERROR, "Cannot execute update (rows updated = " + rowsUpdated+"): " + sql,x);
+            Logger.ERROR( "Cannot execute update (rows updated = " + rowsUpdated+"): " + sql,x);
             rowsUpdated = SQL_ERROR;
         }
         finally
@@ -346,7 +347,7 @@ public class Database implements Constants
         }
         catch(Exception x)
         {
-            Config.log(Config.ERROR, "Cannot execute update (rows updated = " + rowsUpdated+"): " + sql,x);
+            Logger.ERROR( "Cannot execute update (rows updated = " + rowsUpdated+"): " + sql,x);
             //TODO: return an error identifier
         }
         finally
@@ -368,7 +369,7 @@ public class Database implements Constants
             }
             catch(Throwable t)
             {                
-                Config.log(DEBUG, "Error closing DB connection: " + t);                
+                Logger.DEBUG( "Error closing DB connection: " + t);                
             }
             finally
             {

@@ -1,6 +1,8 @@
 
 package utilities;
 
+import btv.http.BTVHTTP;
+import btv.logger.BTVLogLevel;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
@@ -37,8 +39,9 @@ import org.jdom.output.XMLOutputter;
 import org.json.JSONException;
 import org.json.JSONStringer;
 
+import static utilities.Constants.*;
 
-public class tools implements Constants
+public class tools
 {        
     
     /**
@@ -47,26 +50,33 @@ public class tools implements Constants
    * @param URL      URL
    * @throws IOException
    */
-    public static boolean  createStrmFile(File where, String URL)
+    public static StrmUpdateResult createStrmFile(File where, boolean fileExists, String URL)
     {
         if(!valid(URL))
         {
-            Config.log(ERROR, "Cannot create a strm file because invalid parameters are specified, file="+where +", URL="+URL);
-            return false;
+            Logger.ERROR( "Cannot create a strm file because invalid parameters are specified, file="+where +", URL="+URL);
+            return StrmUpdateResult.ERROR;
         }
        
         if(Config.IP_CHANGE_ENABLED)
         {
             for(IPChange change : Config.IP_CHANGES)
-            {                        
-                URL = URL.replace(change.getFrom(), change.getTo());
-                Config.log(DEBUG, "After changing IP from \""+change.getFrom()+"\" to \""+change.getTo()+"\", URL="+URL);
+            {               
+                if(URL.contains(change.getFrom()))
+                {
+                    String newURL = URL.replace(change.getFrom(), change.getTo());
+                    if(!URL.equals(newURL))
+                    {
+                        Logger.DEBUG( "After changing IP from \""+change.getFrom()+"\" to \""+change.getTo()+"\", newURL="+newURL);
+                        URL = newURL;
+                    }
+                }
             }
         }
            
-        //determine current url of the file
+        //determine current url of the file by reading it
         String currentURL = null;
-        if(where.isFile())//is existing file
+        if(fileExists)//is existing file
         { 
             currentURL = "";
             for(Iterator<String> it = tools.readFile(where).iterator(); it.hasNext();)
@@ -80,8 +90,8 @@ public class tools implements Constants
         if(currentURL != null && currentURL.equals(URL))
         {
             //same url, no need to update file on disk
-            Config.log(DEBUG, "Not overwriting because file contents have not changed for: "+ where);
-            return true;
+            //Logger.DEBUG( "Not overwriting because file contents have not changed for: "+ where);
+            return StrmUpdateResult.SKIPPED_NO_CHANGE;
         }
         else//different/new URL, update the file
         {
@@ -90,12 +100,12 @@ public class tools implements Constants
                 FileWriter fw = new FileWriter(where);                
                 fw.write(URL);
                 fw.close();//also flushes
-                return true;
+                return StrmUpdateResult.CHANGED;
             }
             catch (Exception ex)
             {
-                Config.log(WARNING, "Creating shortcut failed: "+ ex.getMessage(),ex);
-                return false;
+                Logger.WARN( "Creating shortcut failed: "+ ex.getMessage(),ex);
+                return StrmUpdateResult.ERROR;
             }
         }
     }
@@ -106,7 +116,7 @@ public class tools implements Constants
             String json = new JSONStringer().object().key(key).value(value).endObject().toString();
             return json.substring(1, json.length()-1);//trim off the surrounding { }
         } catch (JSONException ex) {
-            Config.log(ERROR, "Cannot create JSON key value pair from key:"+key+", value:"+value,ex);
+            Logger.ERROR( "Cannot create JSON key value pair from key:"+key+", value:"+value,ex);
             return "";
         }
 
@@ -187,13 +197,13 @@ public class tools implements Constants
                     }
                     catch(Exception x)
                     {
-                        Config.log(INFO, "Cached XML could not be parsed, reading from online source...",x);
+                        Logger.INFO( "Cached XML could not be parsed, reading from online source...",x);
                     }
                 }
             }
 
             //get XML from URL and cache it when we get it
-            File tempXMLFile = new File(Config.BASE_PROGRAM_DIR + "\\res\\temp.xml");
+            File tempXMLFile = new File(Config.BASE_DIR + "\\res\\temp.xml");
             if(tempXMLFile.exists()) tempXMLFile.delete();
             tempXMLFile.createNewFile();
             FileWriter fstream = null;
@@ -222,7 +232,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Could not get valid XML data from URL: " + url,x);
+            Logger.ERROR( "Could not get valid XML data from URL: " + url,x);
 
             //check for Yahoo API over-load
             String stack = getStacktraceAsString(x).toLowerCase();
@@ -230,7 +240,7 @@ public class tools implements Constants
                 && stack.contains("us.music.yahooapis.com"))
             {
                 Config.SCRAPE_MUSIC_VIDEOS = false;
-                Config.log(WARNING, "Disabling future Yahoo Music Video scraping because requests are over-limit (Response code 999).");
+                Logger.WARN( "Disabling future Yahoo Music Video scraping because requests are over-limit (Response code 999).");
             }
             return null;
         }
@@ -245,7 +255,7 @@ public class tools implements Constants
                 .replace("http://", "")
                 .replace(SEP, "-")
                 .replace("/", "-"));
-        String parent = Config.BASE_PROGRAM_DIR+SEP+"XMLCache"+SEP;
+        String parent = Config.BASE_DIR+SEP+"XMLCache"+SEP;
         String suffix =".xml";
         
         //check max length constraints
@@ -261,7 +271,7 @@ public class tools implements Constants
         File cachedFileLocation = new File(getCachedXMLFileName(url));
         if(!cachedFileLocation.getParentFile().exists()) cachedFileLocation.getParentFile().mkdir();
         if(cachedFileLocation.exists()) cachedFileLocation.delete();        
-        Config.log(DEBUG, "Caching XML from "+ url +" to "+ cachedFileLocation);
+        Logger.DEBUG( "Caching XML from "+ url +" to "+ cachedFileLocation);
         try
         {
             cachedFileLocation.createNewFile();
@@ -269,7 +279,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(INFO, "Failed to copy file "+ XMLFromOnline + " to "+ cachedFileLocation,x);
+            Logger.INFO( "Failed to copy file "+ XMLFromOnline + " to "+ cachedFileLocation,x);
         }
     }
     
@@ -279,12 +289,12 @@ public class tools implements Constants
 
         if(cachedFile.exists())
         {            
-            Config.log(DEBUG, "Using XML from cached file: \""+cachedFile+"\" for URL: "+ url);
+            Logger.DEBUG( "Using XML from cached file: \""+cachedFile+"\" for URL: "+ url);
             return cachedFile;
         }
         else
         {
-            Config.log(DEBUG, "No XML cache exists ("+cachedFile+") for URL, will read from online source");
+            Logger.DEBUG( "No XML cache exists ("+cachedFile+") for URL, will read from online source");
             return null;
         }
     }
@@ -300,7 +310,7 @@ public class tools implements Constants
             }
             catch(Exception x)
             {
-                Config.log(WARNING, "Failed to overwrite file at: "+ f,x);
+                Logger.WARN( "Failed to overwrite file at: "+ f,x);
                 return false;
             }
         }
@@ -326,7 +336,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Cannot write to file: "+targetFile);
+            Logger.ERROR( "Cannot write to file: "+targetFile);
             return false;
         }
     }
@@ -345,7 +355,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Cannot read file contents: "+ x.getMessage(),x);
+            Logger.ERROR( "Cannot read file contents: "+ x.getMessage(),x);
             return null;
         }
     }
@@ -363,18 +373,18 @@ public class tools implements Constants
                 if(valid(dropboxLocation))
                     files.add(new File(dropboxLocation));
             }            
-            Config.log(INFO, "Found "+ files.size() +" videos that are already archived in dropbox from source \""+sourceName+"\"");
+            Logger.INFO( "Found "+ files.size() +" videos that are already archived in dropbox from source \""+sourceName+"\"");
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Cannot get source's archived files from SQLLite: "+x,x);
+            Logger.ERROR( "Cannot get source's archived files from SQLLite: "+x,x);
         }        
         return files;
     }
 
    
     
-    public static boolean addMetaDataChangeToDatabase(XBMCFile video, String typeOfMetaData, String newValue)
+    public static boolean addMetaDataChangeToDatabase(MyLibraryFile video, String typeOfMetaData, String newValue)
     {
 
         String dropboxLocation = video.getFinalLocation();
@@ -387,7 +397,7 @@ public class tools implements Constants
         int id = Config.queuedChangesDB.getSingleInt(checkSQL, params(dropboxLocation,typeOfMetaData));
         if(id == SQL_ERROR)
         {
-            Config.log(ERROR, "Failed to check if this video already has a meta-data-change queues for type \""+typeOfMetaData+"\": "+ dropboxLocation);
+            Logger.ERROR( "Failed to check if this video already has a meta-data-change queues for type \""+typeOfMetaData+"\": "+ dropboxLocation);
             return false;
         }
 
@@ -415,13 +425,13 @@ public class tools implements Constants
                 if(QUEUED.equalsIgnoreCase(status))
                 {
                     //update the queued change with the new value
-                    Config.log(INFO, "Changing queued meta-data "+typeOfMetaData +" from \""+currrentVal+"\"  to \""+newValue+"\" for "+ videoType +" at: "+ dropboxLocation);
+                    Logger.INFO( "Changing queued meta-data "+typeOfMetaData +" from \""+currrentVal+"\"  to \""+newValue+"\" for "+ videoType +" at: "+ dropboxLocation);
                     sql = updateAsQueuedSQL;//update the value
                     params = updateParams;
                 }
                 else if(COMPLETED.equalsIgnoreCase(status))
                 {
-                    Config.log(INFO,"Meta-data has changed. Will remove old meta-data and queue new meta-data for: " +dropboxLocation);
+                    Logger.INFO("Meta-data has changed. Will remove old meta-data and queue new meta-data for: " +dropboxLocation);
                     //Remove the meta data change from XBMC's database, to prepare for the new one
                     XBMCInterface xbmc = new XBMCInterface(Config.DATABASE_TYPE, (Config.DATABASE_TYPE.equals(MYSQL) ? Config.XBMC_MYSQL_VIDEO_SCHEMA : Config.sqlLiteVideoDBPath));
                     File archivedVideo = new File(dropboxLocation);
@@ -435,15 +445,15 @@ public class tools implements Constants
                     int file_id = xbmc.getDB().getSingleInt(fileIdSQL, params(xbmcPath.toLowerCase(), archivedVideo.getName().toLowerCase()));
                     if(file_id < 0)
                     {
-                        if(file_id == SQL_ERROR) Config.log(WARNING, "Cannot update meta-data. Failed to determine idFile using: "+ fileIdSQL);
-                        else Config.log(INFO, "Will not update meta-data. No file exists in XBMC's database");
+                        if(file_id == SQL_ERROR) Logger.WARN( "Cannot update meta-data. Failed to determine idFile using: "+ fileIdSQL);
+                        else Logger.INFO( "Will not update meta-data. No file exists in XBMC's database");
                         return true;//not an error, so return true
                     }
                     int video_id = xbmc.getVideoIdInLibrary(videoType, file_id);
                     if(video_id < 0)
                     {
-                        if(file_id == SQL_ERROR) Config.log(WARNING, "Cannot update meta-data. Failed to determine video id");
-                        else Config.log(INFO, "Will not update meta-data. No video exists in XBMC's database with idFile = "+ file_id);
+                        if(file_id == SQL_ERROR) Logger.WARN( "Cannot update meta-data. Failed to determine video id");
+                        else Logger.INFO( "Will not update meta-data. No video exists in XBMC's database with idFile = "+ file_id);
                         return true;//not really an error, so return true
                     }
                     
@@ -453,21 +463,48 @@ public class tools implements Constants
                         if(valid(currrentVal))
                         {
                             //remove the movie from the movie set
-                            String  removeMetadataSql = "DELETE FROM setlinkmovie "
+                            String  removeMetadataSql = "UPDATE movie "
+                                    + "SET idSet = null "
                                     + "WHERE idSet = (SELECT idSet FROM sets WHERE strSet = ?) "
                                     + "AND idMovie = ?";
                             int rowsUpdated = xbmc.getDB().executeMultipleUpdate(removeMetadataSql, params(currrentVal,video_id));
                             if(rowsUpdated != SQL_ERROR)
                             {
                                 //success, even if rows updated is zero, it just means that the movie no longer exists in the set. Ok for new meta-data
-                                Config.log(INFO, "Successfully removed movie from old set \""+currrentVal+"\" in preperation for adding to new set named \""+newValue+"\"");
+                                Logger.INFO( "Successfully removed movie from old set \""+currrentVal+"\" in preperation for adding to new set named \""+newValue+"\"");
                             }
                             else//sql error
                             {
-                                Config.log(ERROR, "Cannot update meta-data. Failed to remove movie from old set named \""+currrentVal+"\" using "+ removeMetadataSql);
+                                Logger.ERROR( "Cannot update meta-data. Failed to remove movie from old set named \""+currrentVal+"\" using "+ removeMetadataSql);
                                 return false;
                             }
                         }
+                    }
+                    else if(MOVIE_TAGS.equals(typeOfMetaData))
+                    {
+                        if(valid(currrentVal))
+                        {
+                            //remove all the current tags in prep for new data
+                        
+                            List<String> tagsToRemove = new ArrayList<String>();
+                            if(currrentVal.contains("|"))                        
+                                tagsToRemove.addAll(Arrays.asList(currrentVal.split("\\|")));
+                            else
+                                tagsToRemove.add(currrentVal);//single tag
+
+
+                            for(String tagToRemove : tagsToRemove){
+
+                                String tagRemoveSQL = "DELETE FROM taglinks "
+                                        + "WHERE idTag = (SELECT idTag FROM tag WHERE strTag = ?) "
+                                        + "AND idMedia = ? "
+                                        + "AND media_type = ?";
+                                boolean successRemove = xbmc.getDB().executeSingleUpdate(tagRemoveSQL, tools.params(tagToRemove, video_id, "movie"));
+                                if(successRemove)                                
+                                    Logger.INFO( "Removed old movie tag \""+tagToRemove+"\" from movie: " + dropboxLocation);                                
+                                else Logger.WARN( "Failed to remove old movie tags in preperation for new ones!. Sql = "+ tagRemoveSQL);
+                            }
+                        }//end if current value is valid
                     }
                     else if(PREFIX.equalsIgnoreCase(typeOfMetaData) || SUFFIX.equalsIgnoreCase(typeOfMetaData))
                     {
@@ -497,12 +534,12 @@ public class tools implements Constants
                         	//AngryCamel - 20120817 1620 - Added generic
                             else if(videoType.equals(GENERIC))
                             {
-                                Config.log(WARNING,"Generic video type does not update meta data");
+                                Logger.WARN("Generic video type does not update meta data");
                                 return false;
                             }
                             else
                             {
-                                Config.log(WARNING,"Unknown video type: \""+ videoType+"\", will not update meta data");
+                                Logger.WARN("Unknown video type: \""+ videoType+"\", will not update meta data");
                                 return false;
                             }
                             String getCurrentValue = "SELECT " +field +" FROM "+ table +" WHERE "+ idField+" = ?";
@@ -513,7 +550,7 @@ public class tools implements Constants
                                 if(dbValue.startsWith(xFixToRemove))
                                 {
                                     newDBValue = dbValue.substring(xFixToRemove.length(), dbValue.length());
-                                    Config.log(INFO, "Removing old prefix of \""+xFixToRemove+"\" from \""+dbValue+"\" for new value of \""+newDBValue+"\"");
+                                    Logger.INFO( "Removing old prefix of \""+xFixToRemove+"\" from \""+dbValue+"\" for new value of \""+newDBValue+"\"");
                                 }
                             }
                             else if(SUFFIX.equalsIgnoreCase(typeOfMetaData))
@@ -521,17 +558,17 @@ public class tools implements Constants
                                 if(dbValue.endsWith(xFixToRemove))
                                 {
                                     newDBValue = dbValue.substring(0, dbValue.indexOf(xFixToRemove));
-                                    Config.log(INFO, "Removing old suffix of \""+xFixToRemove+"\" from \""+dbValue+"\" for new value of \""+newDBValue+"\"");
+                                    Logger.INFO( "Removing old suffix of \""+xFixToRemove+"\" from \""+dbValue+"\" for new value of \""+newDBValue+"\"");
                                 }
                             }
                             if(newDBValue.equals(dbValue))//this is OK. don't return false,here, continue queueing the new change
-                                Config.log(WARNING, "The old suffix/prefix was not removed because it was not found. \""+xFixToRemove+"\" not found in \""+dbValue+"\"");
+                                Logger.WARN( "The old suffix/prefix was not removed because it was not found. \""+xFixToRemove+"\" not found in \""+dbValue+"\"");
                             else
                             {
                                 //do the update in XBMC
                                 String removeXFixSQL = "UPDATE " + table +" SET " + field +" = ? WHERE " + idField +" = ?";
                                 boolean updated = xbmc.getDB().executeSingleUpdate(removeXFixSQL, params(newDBValue, video_id));
-                                if(!updated) Config.log(ERROR, "Failed to remove old prefix/suffix. Will not update meta-data. Sql = "+ removeXFixSQL);
+                                if(!updated) Logger.ERROR( "Failed to remove old prefix/suffix. Will not update meta-data. Sql = "+ removeXFixSQL);
                             }
                         }
                     }
@@ -543,19 +580,19 @@ public class tools implements Constants
                 }
                 else//unknown status
                 {
-                    Config.log(WARNING, "Unknown status in QueuedChanged table: \""+status+"\". Will not update meta-data for: "+ dropboxLocation);
+                    Logger.WARN( "Unknown status in QueuedChanged table: \""+status+"\". Will not update meta-data for: "+ dropboxLocation);
                     return false;
                 }                                
             }
             else//no changes in the meta data, do nothing
             {
-                Config.log(DEBUG, "Meta-data has not changed for this video. Not updating. type="+typeOfMetaData+", value="+newValue+", file="+dropboxLocation);
+                Logger.DEBUG( "Meta-data has not changed for this video. Not updating. type="+typeOfMetaData+", value="+newValue+", file="+dropboxLocation);
                 return true;//true because this is not a problem.
             }
         }
         else//it's not in the database yet, insert new record
         {
-            Config.log(valid(newValue) ? INFO : DEBUG, "Queueing new meta-data change: type="+typeOfMetaData+", value="+newValue+", file="+dropboxLocation);
+            Logger.log(valid(newValue) ? BTVLogLevel.INFO : BTVLogLevel.DEBUG, "Queueing new meta-data change: type="+typeOfMetaData+", value="+newValue+", file="+dropboxLocation,null);
             sql = insertSQL;
             params = insertParams;
         }
@@ -574,7 +611,7 @@ public class tools implements Constants
         
         if(!f.getName().contains("."))
         {//no extension!
-            Config.log(ERROR, "This files does not have an extension: " + path);
+            Logger.ERROR( "This files does not have an extension: " + path);
             return null;
         }
         int dotIndx = path.lastIndexOf(".");
@@ -583,10 +620,10 @@ public class tools implements Constants
     
   
     
-    public static boolean trackArchivedFile(String sourceName, String dropboxLocation, XBMCFile video)
+    public static boolean trackArchivedFile(String sourceName, String dropboxLocation, MyLibraryFile video)
     {
         if(!dropboxLocation.endsWith(".strm"))
-            Config.log(ERROR, "File being archived is not a .strm: "+ dropboxLocation);
+            Logger.ERROR( "File being archived is not a .strm: "+ dropboxLocation);
         
         ArchivedFile currentlyArchivedFile = Config.archivedFilesDB.getArchivedFileByLocation(dropboxLocation);
         
@@ -626,12 +663,12 @@ public class tools implements Constants
             }
             if(!changed)
             {
-                Config.log(DEBUG, "Nothing has changed for this video, no need to update tracker database for: "+ dropboxLocation);
+                Logger.DEBUG( "Nothing has changed for this video, no need to update tracker database for: "+ dropboxLocation);
                 return true;
             }
             else//fields changed, update with the new values
             {
-                Config.log(DEBUG, "Changes occurred for this video. updating database: "+ dropboxLocation);
+                Logger.DEBUG( "Changes occurred for this video. updating database: "+ dropboxLocation);
                 //if any of the values have changed, update the entry to catch any changed values (also reverts any missing_since or missing_count since this file is no longer missing)
                 sql = "UPDATE ArchivedFiles SET source_name = ?, dropbox_location = ?, "
                         + "original_path = ?, missing_since = ?, missing_count = ?, date_archived = ?,"
@@ -670,14 +707,14 @@ public class tools implements Constants
             int updateCount = prep.executeUpdate();            
             if(updateCount == 1)
             {
-                Config.log(DEBUG, "Successfully "+(updating ? "updated":"added")+" file in ArchivedFiles tracking table from source "+ sourceName+": "+Config.escapePath(video.getFullPath())+": "+ dropboxLocation);
+                Logger.DEBUG( "Successfully "+(updating ? "updated":"added")+" file in ArchivedFiles tracking table from source "+ sourceName+": "+Config.escapePath(video.getFullPath())+": "+ dropboxLocation);
                 return true;
             }
             else throw new Exception(updateCount +" rows were updated (expected 1).");
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to add archived file \""+dropboxLocation+"\" to SQLite Database: "+ x,x);
+            Logger.ERROR( "Failed to add archived file \""+dropboxLocation+"\" to SQLite Database: "+ x,x);
             return false;
         }
         finally
@@ -695,7 +732,7 @@ public class tools implements Constants
         ArchivedFile archivedFile = Config.archivedFilesDB.getArchivedFileByLocation(path);                
         if(archivedFile == null)
         {
-            Config.log(WARNING, "This file was not found in the ArchivedFiles database, cannot mark it as missing. Will set this file to be deleted.");
+            Logger.WARN( "This file was not found in the ArchivedFiles database, cannot mark it as missing. Will set this file to be deleted.");
             return true;
         }
         
@@ -720,7 +757,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "Failed to update file as missing using: "+ updateSQL,x);
+            Logger.WARN( "Failed to update file as missing using: "+ updateSQL,x);
         }
         finally
         {
@@ -733,7 +770,7 @@ public class tools implements Constants
         double missingForHours = missingForSeconds / 60.0 / 60.0;
         if(missingForHours >= Config.MISSING_HOURS_DELETE_THRESHOLD && missingCount >= Config.MISSING_COUNT_DELETE_THRESHOLD)
         {
-            Config.log(INFO, "This video should be deleted because it has been missing for "+ toTwoDecimals(missingForHours) +" hours (threshold is "+Config.MISSING_HOURS_DELETE_THRESHOLD+"), "
+            Logger.INFO( "This video should be deleted because it has been missing for "+ toTwoDecimals(missingForHours) +" hours (threshold is "+Config.MISSING_HOURS_DELETE_THRESHOLD+"), "
                   + "and has been missing the past "+ missingCount +" times this program has checked for it (threshold is "+ Config.MISSING_COUNT_DELETE_THRESHOLD+")");
             return true;
         }
@@ -744,7 +781,7 @@ public class tools implements Constants
                 reason += "It has only been missing for "+ toTwoDecimals(missingForHours) +" hours (less than threshold of "+ Config.MISSING_HOURS_DELETE_THRESHOLD+"). ";
             if(missingCount < Config.MISSING_COUNT_DELETE_THRESHOLD)
                 reason += "It has been missing the past "+ missingCount +" times this program has checked, it must be missing for at least "+ Config.MISSING_COUNT_DELETE_THRESHOLD +" times before it is deleted.";
-            Config.log(INFO,  reason);
+            Logger.INFO(  reason);
             return false;
         }
     }
@@ -782,7 +819,7 @@ public class tools implements Constants
             else            
                 inValidChars.append(current);           
         }
-        //log(DEBUG, "Removed these invalid XML characters: " + inValidChars);
+        //Logger.DEBUG( "Removed these invalid XML characters: " + inValidChars);
         return validChars.toString().trim();
     }
 
@@ -794,7 +831,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Cannot format date as TVDB style using "+Config.tvdbFirstAiredSDF.toPattern() +": "+ dt);
+            Logger.ERROR( "Cannot format date as TVDB style using "+Config.tvdbFirstAiredSDF.toPattern() +": "+ dt);
             return null;
         }
     }
@@ -810,7 +847,7 @@ public class tools implements Constants
     {
         if(!isNetworkShare(fullSharePath))
         {
-            Config.log(Config.WARNING, "Checking if share is available, but the file \""+fullSharePath+"\" is not a network share");
+            Logger.WARN( "Checking if share is available, but the file \""+fullSharePath+"\" is not a network share");
             return new File(fullSharePath).getParentFile().exists();
         }
 
@@ -824,12 +861,12 @@ public class tools implements Constants
             if(secondSeperator == -1) secondSeperator = fullSharePath.length();
             String baseShare = fullSharePath.substring(0, secondSeperator);
             File f = new File(baseShare);
-            Config.log(DEBUG, "Checking if share at \""+ baseShare +"\" is available = "+ f.exists());
+            Logger.DEBUG( "Checking if share at \""+ baseShare +"\" is available = "+ f.exists());
             return  f.exists();
         }
         else//something like \\share
         {
-            Config.log(Config.WARNING, "Cannot check if the network share is available because the path is too short: "+ fullSharePath);
+            Logger.WARN( "Cannot check if the network share is available because the path is too short: "+ fullSharePath);
             return false;
         }
     }  
@@ -988,7 +1025,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "IP Range \""+range+"\" is not valid: "+ x);
+            Logger.WARN( "IP Range \""+range+"\" is not valid: "+ x);
             return false;
         }
     }
@@ -1032,7 +1069,7 @@ public class tools implements Constants
 
     }    
 
-    public static XBMCFile getVideoFromOriginalLocation(String originalLocationUnescaped)
+    public static MyLibraryFile getVideoFromOriginalLocation(String originalLocationUnescaped)
     {
         String sql = "SELECT original_path, dropbox_location, video_type, title, series, artist, episode_number, season_number, year, is_tvdb_lookup "
                 + "FROM ArchivedFiles "
@@ -1040,7 +1077,7 @@ public class tools implements Constants
       return Config.archivedFilesDB.getVideoWithMetaDataFromDB(sql,params(originalLocationUnescaped));
     }
 
-    public static XBMCFile getVideoFromDropboxLocation(File f)
+    public static MyLibraryFile getVideoFromDropboxLocation(File f)
     {
         String sql = "SELECT original_path, dropbox_location, video_type, title, series, artist, episode_number, season_number, year, is_tvdb_lookup "
                 + "FROM ArchivedFiles "
@@ -1058,62 +1095,7 @@ public class tools implements Constants
         return jsonString;
     }
     
-    /*
-     * Returns null if fail, otherwise returns the String response from the post
-     */
-    public static String post(String strUrl, String data) throws Exception{
-        URL url = new URL(strUrl);
-        
-        final String method = "POST";
-        final String host = url.getHost();
-        final String contentType = "application/x-www-form-urlencoded";
-        final int contentLength = getContentLength(data);
-        final String encoding = "UTF-8";//good idea?        
-        final String connection = "Close";// "keep-alive";
-        
-        Config.log(DEBUG, "Sending data to: "+ url+" (host="+host+", encoding="+encoding+", method="+method+", Content-Type="+contentType+", Content-Length="+contentLength+", Connection="+connection+"):"
-                            +"\r\n"+data);        
-        
-        HttpURLConnection conn = (HttpURLConnection)url.openConnection();
-        conn.setDoOutput(true);//let it know we are writing data  
-        conn.setRequestMethod(method);//POST
-        conn.setRequestProperty("host", host);        
-        conn.setRequestProperty("content-type", contentType);
-        conn.setRequestProperty("Content-Encoding", encoding);
-        conn.setRequestProperty("content-length", contentLength+"");                                      
-        conn.setRequestProperty("connection", connection);                
-        
-        //authenticate if used
-        if(tools.valid(Config.JSON_RPC_WEBSERVER_USERNAME) && tools.valid(Config.JSON_RPC_WEBSERVER_PASSWORD)){
-            String authString = Config.JSON_RPC_WEBSERVER_USERNAME + ":" + Config.JSON_RPC_WEBSERVER_PASSWORD;            
-            String authStringEnc = new sun.misc.BASE64Encoder().encode(authString.getBytes());
-            conn.setRequestProperty("Authorization", "Basic " + authStringEnc);
-        }
-        
-        conn.setReadTimeout((int) (Config.JSON_RPC_TIMEOUT_SECONDS*1000));
-        
-        //send data the to remote server
-        OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
-        writer.write(data);
-        writer.flush();
-        writer.close();
-        
-        int responseCode = 400;
-        try{
-            responseCode = conn.getResponseCode();
-        }catch(Exception x){
-            Config.log(ERROR, "Failed to get response code from HTTP Server. Check your URL and username/password.",x);
-        }
-        
-        //read the response                
-        String response = readStream(responseCode == 200 ? conn.getInputStream() : conn.getErrorStream());        
-        if(response == null){
-            return null;
-        }
-        
-        Config.log(DEBUG, "Raw response from POST. Response Code = "+conn.getResponseCode()+" ("+conn.getResponseMessage()+"):\r\n"+ response);
-        return response.toString();
-    }
+    
     public static int getContentLength(String data) throws UnsupportedEncodingException{        
         ByteArrayOutputStream sizeArray = new ByteArrayOutputStream();
         PrintWriter sizeGetter = new PrintWriter(new OutputStreamWriter(sizeArray, "UTF-8" ));                
@@ -1138,7 +1120,7 @@ public class tools implements Constants
             return data.toString();
         }
         catch(IOException x){
-            Config.log(ERROR,"Failed to read stream: "+ x,x);
+            Logger.ERROR("Failed to read stream: "+ x,x);
             return null;
         }
     }
@@ -1153,7 +1135,7 @@ public class tools implements Constants
                 String nameNoExt = tools.fileNameNoExt(strmFile);
                 boolean deleted = strmFile.delete();
                 if(!deleted)
-                    Config.log(WARNING, "Failed to delete .strm file: "+ strmFile);
+                    Logger.WARN( "Failed to delete .strm file: "+ strmFile);
                 else//successfully deleted
                 {
                     String[] metaExts = new String[]{".nfo",".tbn","-fanart.jpg"};
@@ -1167,7 +1149,7 @@ public class tools implements Constants
                             if(metaFile.isFile())
                             {
                                 if(metaFile.delete())
-                                    Config.log(DEBUG, "Deleted "+ metaFile.getName());                                
+                                    Logger.DEBUG( "Deleted "+ metaFile.getName());                                
                             }
                         }catch(Exception ignored){}
                     }
@@ -1176,13 +1158,13 @@ public class tools implements Constants
             }
             else
             {
-                Config.log(WARNING, "Not deleting file because it does not have a .strm extension: "+ strmFile.getPath());
+                Logger.WARN( "Not deleting file because it does not have a .strm extension: "+ strmFile.getPath());
                 return false;
             }
         }
         else
         {
-            Config.log(INFO, "Not deleting file because it does not exist on disk: "+ strmFile);
+            Logger.INFO( "Not deleting file because it does not exist on disk: "+ strmFile);
             return false;
         }
     }
@@ -1195,7 +1177,7 @@ public class tools implements Constants
             for(Object o : params)
             {                
                 if(o==null)
-                    Config.log(WARNING, "Null parameter found. Cannot auto-determine type!");
+                    Logger.WARN( "Null parameter found. Cannot auto-determine type!");
                 //convert object to correct type
                 Param param = null;
                                                     
@@ -1208,7 +1190,7 @@ public class tools implements Constants
                 else if(o instanceof java.sql.Timestamp)
                     param = new Param(ParamType.TIMESTAMP,(java.sql.Timestamp) o);
                 else{
-                    Config.log(WARNING, "Unknown param: "+ o.getClass()+": "+ o);                                
+                    Logger.WARN( "Unknown param: "+ o.getClass()+": "+ o);                                
                     param =new Param(ParamType.OBJECT,o);
                 }
                 
@@ -1218,7 +1200,7 @@ public class tools implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to build parameter list from: " + Arrays.toString(params),x);
+            Logger.ERROR( "Failed to build parameter list from: " + Arrays.toString(params),x);
             return null;
         }
     }

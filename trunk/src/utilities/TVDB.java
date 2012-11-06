@@ -8,19 +8,12 @@ import java.util.List;
 import org.jdom.Document;
 import org.jdom.Element;
 
-public class TVDB implements Constants
-{    
+import static utilities.Constants.*;
 
-    private static void log(int level, String s, Exception x)
-    {
-        Config.log(level,s,"TVDB",x);
-    }
-    private static void log(int level, String s)
-    {
-        TVDB.log(level,s,null);
-    }
+public class TVDB
+{      
     
-    public static boolean lookupTVShow(XBMCFile video)
+    public static boolean lookupTVShow(MyLibraryFile video)
     {
         video.setHasBeenLookedUpOnTVDB(true);
         boolean lookupWasSuccessful = false;
@@ -28,31 +21,31 @@ public class TVDB implements Constants
         //determine if this has already been looked up successfully and skip the query
         if(video.getSubfolder()==null || !video.getSubfolder().forceTVDBLookup())
         {//tvdb lookup is NOT forced true
-            log(DEBUG, "Checking if this video has already been looked up on TVDB based on original path of: "+ video.getFullPathEscaped());
-            XBMCFile previouslyLookedupVideo = tools.getVideoFromOriginalLocation(video.getFullPath());//not escaped                        
+            Logger.DEBUG( "Checking if this video has already been looked up on TVDB based on original path of: "+ video.getFullPathEscaped());
+            MyLibraryFile previouslyLookedupVideo = tools.getVideoFromOriginalLocation(video.getFullPath());//not escaped                        
             
             if(previouslyLookedupVideo==null || !previouslyLookedupVideo.hasBeenLookedUpOnTVDB())
             {
-                log(INFO, "This video has not been succesfully looked up on the TVDB before, will attempt lookup now.");
+                Logger.INFO( "This video has not been succesfully looked up on the TVDB before, will attempt lookup now.");
             }
             else
             {
                 if(previouslyLookedupVideo.hasValidMetaData())
                 {
-                    log(INFO, "This video has previously been successfully looked up on the TVDB, will use saved meta-data instead of querying TVDB.com");
+                    Logger.INFO( "This video has previously been successfully looked up on the TVDB, will use saved meta-data instead of querying TVDB.com");
                     //copy over all data
                     //make sure we keep the original sufolder and don't use the dummy subfolder
                     Subfolder subf = video.getSubfolder();
-                    XBMCFile.copyVideoMetaData(previouslyLookedupVideo, video);
+                    MyLibraryFile.copyVideoMetaData(previouslyLookedupVideo, video);
                     video.setSubfolder(subf);
                     return true;
                 }
                 else
-                    log(INFO, "This video has been queried on the TVDB before, but it was unsuccessful. Will try again now: "+ video.getFullPathEscaped());
+                    Logger.INFO( "This video has been queried on the TVDB before, but it was unsuccessful. Will try again now: "+ video.getFullPathEscaped());
             }
         }
         else
-            log(DEBUG, "Force TVDB lookup is true, skipping DB data check and continuing with TVDB lookup.");
+            Logger.DEBUG( "Force TVDB lookup is true, skipping DB data check and continuing with TVDB lookup.");
 
         String seriesTitle = video.getSeries();
         String episodeTitle = video.getTitle();
@@ -61,14 +54,14 @@ public class TVDB implements Constants
         boolean canLookupSeriedId = tools.valid(seriesTitle) || video.isTVDBIdOverridden();
         if(!canLookupSeriedId)
         {
-            log(WARNING, "Cannot lookup TV series because series name is unknown: "+video.getFullPathEscaped());
+            Logger.WARN( "Cannot lookup TV series because series name is unknown: "+video.getFullPathEscaped());
             return false;
         }
 
         boolean canLookupEpisode = tools.valid(episodeTitle) || tools.valid(originalAirDate);
         if(!canLookupEpisode)
         {
-            log(WARNING, "Cannot lookup TV episode because neither episode title nor original air date are known: "+video.getFullPathEscaped());
+            Logger.WARN( "Cannot lookup TV episode because neither episode title nor original air date are known: "+video.getFullPathEscaped());
             return false;
         }
                 
@@ -80,7 +73,7 @@ public class TVDB implements Constants
             if(!video.isTVDBIdOverridden())
             {
                 tvdbURL = "http://www.thetvdb.com/api/GetSeries.php?seriesname="+java.net.URLEncoder.encode(seriesTitle,"UTF-8");
-                log(DEBUG, "Attempting to get series IDs (max of "+maxSeries+") based on seriesname of '"+seriesTitle+"', url = " + tvdbURL);
+                Logger.DEBUG( "Attempting to get series IDs (max of "+maxSeries+") based on seriesname of '"+seriesTitle+"', url = " + tvdbURL);
                 java.net.URL URL = new java.net.URL(tvdbURL);
                 Document xml = tools.getXMLFromURL(URL);
                 List<Element> children = xml.getRootElement().getChildren();
@@ -91,29 +84,29 @@ public class TVDB implements Constants
                     String seriesId = series.getChildText("seriesid");
                     seriesIds.add(seriesId);
                     String seriesName =  series.getChildText("SeriesName");
-                    log(DEBUG, "Adding Series #"+seriesCount+" found from thetvdb: seriesName= \"" + seriesName + "\" id = \"" + seriesId+"\"");
+                    Logger.DEBUG( "Adding Series #"+seriesCount+" found from thetvdb: seriesName= \"" + seriesName + "\" id = \"" + seriesId+"\"");
                     if(seriesCount == maxSeries) break;
                 }
                 if(seriesIds.isEmpty())
                 {
-                     log(WARNING, "Ending lookup. No series could be found by querying TheTVDB: "+tvdbURL +". Will try to archive this video again later.");                     
+                     Logger.WARN( "Ending lookup. No series could be found by querying TheTVDB: "+tvdbURL +". Will try to archive this video again later.");                     
                      return false;//unsuccessful lookup
                 }
             }
             else
             {
                 seriesIds.add(video.getTVDBId());
-                log(INFO, "TheTVDB series ID is already known, no need to look it up. Using ID of: \"" + video.getTVDBId()+"\"");
+                Logger.INFO( "TheTVDB series ID is already known, no need to look it up. Using ID of: \"" + video.getTVDBId()+"\"");
             }
 
             boolean originalAirDateIsAvailable = tools.valid(tools.normalize(video.getOriginalAirDate()));
-            if(!originalAirDateIsAvailable) log(DEBUG, "Original air date is not known, will not try to match on it.");
+            if(!originalAirDateIsAvailable) Logger.DEBUG( "Original air date is not known, will not try to match on it.");
             boolean episodeTitleIsAvailable = tools.valid(tools.normalize(video.getTitle()));
-            if(!episodeTitleIsAvailable) log(DEBUG, "No episode title is available, will not try to match on it.");
+            if(!episodeTitleIsAvailable) Logger.DEBUG( "No episode title is available, will not try to match on it.");
 
             if(!originalAirDateIsAvailable && !episodeTitleIsAvailable)
             {
-                log(WARNING, "Neither title nor original air date are available. Need at least 1 to lookup on thetvdb.com. File = "+video.getFullPathEscaped() +".");
+                Logger.WARN( "Neither title nor original air date are available. Need at least 1 to lookup on thetvdb.com. File = "+video.getFullPathEscaped() +".");
                 return false;
             }
 
@@ -122,7 +115,7 @@ public class TVDB implements Constants
                 //get episode info by orig air date and title
                 tvdbURL = "http://www.thetvdb.com/api/" + Config.TVDB_API_KEY + "/series/"+seriesId+"/all/en.xml";
 
-                log(INFO, "Attempting to find matching episode with"
+                Logger.INFO( "Attempting to find matching episode with"
                         +(originalAirDateIsAvailable ? " original air date = \""+tools.normalize(originalAirDate)+"\"" : "")
                         +(episodeTitleIsAvailable ? " title = \""+tools.normalize(episodeTitle)+"\"" : "")
                         +" from thetvdb, url = " + tvdbURL.replace(Config.TVDB_API_KEY, Config.TVDB_API_KEY_OBSCURED));
@@ -143,10 +136,10 @@ public class TVDB implements Constants
                 String singleMatchTVDBFullInfo = null;
                 Element singleMatchEpisode = null;
                                 
-                log(DEBUG, "Found "+ episodes.size() +" episodes for series id "+ seriesId +". Will look for match now...");
+                Logger.DEBUG( "Found "+ episodes.size() +" episodes for series id "+ seriesId +". Will look for match now...");
                 if(episodes == null || episodes.isEmpty())
                 {
-                    log(WARNING, "No episodes found on TheTVDB for series "+ seriesTitle + " ("+seriesId+"). "
+                    Logger.WARN( "No episodes found on TheTVDB for series "+ seriesTitle + " ("+seriesId+"). "
                         + "You may need to add the series/episodes on TheTVDB.com, or manually provide the correct TVDB id in the config file.");
                     return false;
                 }
@@ -171,7 +164,7 @@ public class TVDB implements Constants
                         if(tools.normalize(video.getOriginalAirDate()).equalsIgnoreCase(tools.normalize(tvdbFirstAired)))
                         {
                             dateMatch = true;
-                            log(DEBUG, "DATE MATCH: " + tvdbFullInfo);
+                            Logger.DEBUG( "DATE MATCH: " + tvdbFullInfo);
 
                             if(!singleMatch)
                             {
@@ -185,7 +178,7 @@ public class TVDB implements Constants
                                 singleMatch = false;//a second (or greater) match was found. There is no longer a single episode match
                             }
                         }
-                        else log(DEBUG, "NO DATE MATCH: \"" + tools.normalize(video.getOriginalAirDate()) + "\" != \"" + tools.normalize(tvdbFirstAired)+"\"");
+                        else Logger.DEBUG( "NO DATE MATCH: \"" + tools.normalize(video.getOriginalAirDate()) + "\" != \"" + tools.normalize(tvdbFirstAired)+"\"");
                     }
                     else//no orig air date avail, dont need to find a match for it
                     {
@@ -203,7 +196,7 @@ public class TVDB implements Constants
                         {
                             if(fuzzyMatch) isFuzzyMatch = true;
                             titleMatch = true;
-                            log(DEBUG, (fuzzyMatch ? "FUZZY " : "") + "TITLE MATCH: " + tvdbFullInfo);
+                            Logger.DEBUG( (fuzzyMatch ? "FUZZY " : "") + "TITLE MATCH: " + tvdbFullInfo);
                             if(!singleMatch)
                             {
                                 singleMatch = true;
@@ -224,11 +217,11 @@ public class TVDB implements Constants
 
                     if(titleMatch && dateMatch)
                     {
-                        log(INFO, "Title and date match, saving data for this match...");
+                        Logger.INFO( "Title and date match, saving data for this match...");
                         //add the season/episode numbers
                         if(!video.addTVDBSeriesEpisodeNumbers(tvdbSeasonNumber, tvdbEpisodeNumber))
                         {
-                            log(ERROR, "Found a match on thetvdb.com for "+ video.getFullPathEscaped() +", "
+                            Logger.ERROR( "Found a match on thetvdb.com for "+ video.getFullPathEscaped() +", "
                                 + "but the season and episode numbers are invalid (\""+tvdbSeasonNumber+"\", \""+tvdbEpisodeNumber+"\"). "
                                 + "Skipping...");
                             return false;
@@ -238,19 +231,19 @@ public class TVDB implements Constants
                         {
                             if(tools.valid(tvdbEpisodeTitle))
                             {
-                                log(DEBUG, "Setting video title to title from the TVDB: \""+tvdbEpisodeTitle+"\"");
+                                Logger.DEBUG( "Setting video title to title from the TVDB: \""+tvdbEpisodeTitle+"\"");
                                 video.setTitle(tvdbEpisodeTitle);
                             }
                         }
                         lookupWasSuccessful = true;
-                        log(INFO, "SUCCESSFUL LOOKUP" +(isFuzzyMatch ? " (fuzzy match)" : " (exact match)")+": Found matching episdode on thetvdb: "+tvdbFullInfo);
+                        Logger.INFO( "SUCCESSFUL LOOKUP" +(isFuzzyMatch ? " (fuzzy match)" : " (exact match)")+": Found matching episdode on thetvdb: "+tvdbFullInfo);
 
                         if(tvdbSeasonNumber.equals("0") || isFuzzyMatch)
                         {
                             if(isFuzzyMatch)
-                                log(DEBUG, "Since this was a fuzzy match, will continue to search for exact matches and only use this match if no exact matches exist.");
+                                Logger.DEBUG( "Since this was a fuzzy match, will continue to search for exact matches and only use this match if no exact matches exist.");
                             else
-                                log(DEBUG, "Since the season number is zero, will continue to look for matching episodes, and use a 'regular' season matching episode if it exists. "
+                                Logger.DEBUG( "Since the season number is zero, will continue to look for matching episodes, and use a 'regular' season matching episode if it exists. "
                                     + "Otherwise will fall back to this 'special' episode.");
                         }
                         else
@@ -262,13 +255,13 @@ public class TVDB implements Constants
                 {                                        
                     if(singleMatch)
                     {
-                        log(INFO, "Could not match on all criteria, but a single match was found based on " + criteriaUsedForSingleMatch +". "
+                        Logger.INFO( "Could not match on all criteria, but a single match was found based on " + criteriaUsedForSingleMatch +". "
                                 + "Will use episode info: " + singleMatchTVDBFullInfo);
                         String seasonNum = singleMatchEpisode.getChildText("SeasonNumber");
                         String episodeNum = singleMatchEpisode.getChildText("EpisodeNumber");
                         if(!video.addTVDBSeriesEpisodeNumbers(seasonNum, episodeNum))
                         {
-                             log(ERROR, "Found a multi-part match on thetvdb.com for "+ video.getFullPathEscaped() +", "
+                             Logger.ERROR( "Found a multi-part match on thetvdb.com for "+ video.getFullPathEscaped() +", "
                                     + "but the season and episode numbers are invalid (\""+seasonNum+"\", \""+episodeNum+"\"). "
                                     + "Skipping and trying again later.");
                                 return false;
@@ -277,7 +270,7 @@ public class TVDB implements Constants
                     }
                     else
                     {
-                        log(INFO, "NOT FOUND: Could not find any episode that matched "+(originalAirDateIsAvailable ? "original air date ("+video.getOriginalAirDate()+"), " :"") +
+                        Logger.INFO( "NOT FOUND: Could not find any episode that matched "+(originalAirDateIsAvailable ? "original air date ("+video.getOriginalAirDate()+"), " :"") +
                                 (episodeTitleIsAvailable ? " episode title ("+video.getTitle()+")":"")+" for TVDB series id " +seriesId + "."
                                 + " For video at: " + video.getFullPathEscaped());
                         lookupWasSuccessful = false;
@@ -296,7 +289,7 @@ public class TVDB implements Constants
         }
         catch(Exception x)
         {
-            log(ERROR, "Failed to get episode information from the TVDB for " + video.getFullPathEscaped() +", URL = "+ tvdbURL,x);
+            Logger.ERROR( "Failed to get episode information from the TVDB for " + video.getFullPathEscaped() +", URL = "+ tvdbURL,x);
             return false;
         }
     }

@@ -1,5 +1,6 @@
 package utilities;
 
+import btv.logger.BTVLogLevel;
 import db.ArchivedFilesDB;
 import db.Database;
 import db.QueuedChangesDB;
@@ -15,34 +16,10 @@ import org.jdom.Document;
 import org.jdom.Element;
 import org.jdom.input.SAXBuilder;
 
-public class Config implements Constants
+import static utilities.Constants.*;
+public class Config extends Constants
 {
-    public static boolean RESTART_XBMC = false;
-    
-    
-    
-    
-    /*
-     * Downloading support has been removed
-     * 
-    public static boolean COMSKIP_DOWNLOADED_VIDEOS = false;
-    public static String JDOWNLOADER_HOST = "http://localhost:10025";
-    public static String DOWNLOADED_VIDEOS_DROPBOX = "\\\\localhost\\c$\\dropbox\\Downloaded";
-    public static int EDL_TYPE = 0;
-    public static Map<String, CompressionDefinition> COMPRESSION_DEFINITIONS = new LinkedHashMap<String, CompressionDefinition>();
-    */
-    
-    //the writers for the current and historical log files
-    public static ServerSocket SINGLE_INSTANCE_SOCKET = null;
-    public static int SINGLE_INSTANCE_PORT = -1;
-    public static Logger logger;
-    public static BufferedWriter historicalLog = null;//log historically by day
-    public static BufferedWriter currentLog = null;//log the last execution of the program
-    
-    public static int LOGGING_LEVEL = 4;//default of INFO
-    private static Map<Integer,String> LOGGING_LEVELS = new LinkedHashMap<Integer,String>();
-    public static int LOG_EXPIRE_DAYS = 30;
-    public static String BASE_PROGRAM_DIR = "C:\\XBMC.MyLibrary";
+    public static boolean RESTART_XBMC = false;                      
     public static String DROPBOX = null;
     public static String LINUX_SAMBA_PREFIX = null;
     public static Set<Source> ALL_SOURCES = new LinkedHashSet<Source>();
@@ -73,22 +50,15 @@ public class Config implements Constants
 
     public static int XBMC_SERVER_WEB_PORT = 8000;
 
-     //TheTVDB config
-    public static String TVDB_API_KEY = "[no TVDB API Key found -- Please specify in config file]";//API key for tvdb lookups. Can be obtained by registerin at thetvdb.com
+     //TheTVDB config    
     public static String TVDB_API_KEY_OBSCURED = null;//for printing in log
     public static long MAX_TVDB_QUERY_INTERVAL_MS = (1000 * 60 * 60);//1 hour default wait time between TVDB identical requeries
     public static final int TVBD_QUERY_RECYCLE_MINUTES = 24*60;//forces tvdb queries to be re-cycled (remove them from tracker file) after this many minutes passes
     public static boolean OBSCURE_TVDB_KEY_IN_LOG = false;
 
     //JSON-RPC config
-    public static long JSON_RPC_RESPONSE_TIMEOUT_MS = 50;//the millisecond timeout once data starts being received to know that all data has been receieved
-    public static long JSON_RPC_TIMEOUT_SECONDS = 60;//time timeout in seconds to wait for json-rpc to start sending data after a request has been made
-    public static String JSON_RPC_SERVER = "[unknown]";
-    public static boolean USE_HTTP = false;
-    public static int JSON_RPC_WEBSERVER_PORT = 8080;
-    public static String JSON_RPC_WEBSERVER_USERNAME = "";
-    public static String JSON_RPC_WEBSERVER_PASSWORD = "";    
-    
+    public static int JSON_RPC_RAW_PORT = 9090;
+    public static String XBMC_WEB_SERVER_URL = "[unknown]";                
 
     //IP Change
     public static boolean IP_CHANGE_ENABLED = false;
@@ -122,66 +92,26 @@ public class Config implements Constants
     public static final SimpleDateFormat tvdbFirstAiredSDF = new SimpleDateFormat("yyyy-MM-dd");//for lookup on thetvdb based on first aired date
     public static final SimpleDateFormat log_sdf = new SimpleDateFormat("MM/dd/yyyy hh:mm:ss a");//for logging    
 
-    boolean IS_THUMB_CLEANER=false, IS_MY_LIBRARY=false;
+    final boolean IS_MY_LIBRARY=true;//legacy from thumbcleaner sharing
     String logFileNameNoExt;
-    public Config(String which)
+    public Config()
     {
-
-        if(which.equals(THUMB_CLEANER)) IS_THUMB_CLEANER = true;
-        if(which.equals(MY_LIBRARY)) IS_MY_LIBRARY = true;
-        if(IS_MY_LIBRARY) SINGLE_INSTANCE_PORT = 52872;
-        else SINGLE_INSTANCE_PORT = 52873;
-        
-        //instantite logging levels
-        LOGGING_LEVELS.put(1, "ERROR");
-        LOGGING_LEVELS.put(2, "WARNING");
-        LOGGING_LEVELS.put(3, "NOTICE");
-        LOGGING_LEVELS.put(4, "INFO");
-        LOGGING_LEVELS.put(5,"DEBUG");
-        setShortLogDesc("Init...");
-
-        if(!SingleInstance.isSingleInstance()) System.exit(1);
+        super(PROGRAM_NAME+".properties", LOGGING_LEVEL, SINGLE_INSTANCE, SINGLE_INSTANCE_PORT, -1);                                
+                                
+        setShortLogDesc("Init...");        
 
         
         
                 
 
          //populate charactes that we do not allow in file names
-        char[] specialChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '*', '~', '™'};
+        char[] specialChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '*', '~', 'ï¿½'};
         for(char c : specialChars) ILLEGAL_FILENAME_CHARS.put(new Integer((int) c), "illegal");
 
-        char[] uncommonChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '#', '$', '%', '^', '*', '!', '~','\'', '™', '=', '[' ,']', '(', ')', ';', '\\' ,',', '_'};
+        char[] uncommonChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '#', '$', '%', '^', '*', '!', '~','\'', 'ï¿½', '=', '[' ,']', '(', ')', ';', '\\' ,',', '_'};
         for(char c : uncommonChars) UNCOMMON_CHARS.put(new Integer((int) c), "illegal");
 
-        //set up logs
-        logFileNameNoExt = IS_MY_LIBRARY ? "XBMC.MyLibrary" : "XBMC.ThumbCleaner";
-        File currentLogFile = new File(BASE_PROGRAM_DIR + "\\"+logFileNameNoExt+".log");
-        try
-        {
-            
-            currentLog = new BufferedWriter(new FileWriter(currentLogFile,false));//dont append, overwrite
-            
-        }
-        catch(Exception x)
-        {
-            currentLog = null;
-            log(WARNING, "Warning: could not create current log file at: "+currentLogFile,x);
-        }
-
-        File historicalLogDir = new File(BASE_PROGRAM_DIR + "\\logs");
-        if(!historicalLogDir.exists())historicalLogDir.mkdir();
-        File historicalLogFile = new File(Config.BASE_PROGRAM_DIR + "\\logs\\"+logFileNameNoExt+"." + Config.tvdbFirstAiredSDF.format(new Date())+".log");
-        try
-        {
-            historicalLog = new BufferedWriter(new FileWriter(historicalLogFile,true));//append
-        }
-        catch(Exception x)
-        {
-            historicalLog = null;
-            log(WARNING, "Warning: could not create historical log file at: "+historicalLogFile,x);
-        }
-        logger = new Logger(currentLog,historicalLog);  
-
+        
         /*
          * Only needed for MyLibrary
          */
@@ -195,13 +125,12 @@ public class Config implements Constants
 
     public boolean loadConfig()
     {
-        String xmlFileName = "Config.xml";//dfault
-        if(IS_THUMB_CLEANER) xmlFileName = "ThumbCleanerConfig.xml";
-        String strConfigFile = BASE_PROGRAM_DIR+SEP+ xmlFileName;
+        String xmlFileName = "Config.xml";//dfault        
+        String strConfigFile = BASE_DIR+SEP+ xmlFileName;
         File configFile = new File(strConfigFile);
         if(!configFile.exists())
         {
-            log(ERROR, "Config file does not exits at: \""+strConfigFile+"\". Cannot continue.");
+            Logger.ERROR( "Config file does not exits at: \""+strConfigFile+"\". Cannot continue.");
             return false;
         }
 
@@ -216,93 +145,52 @@ public class Config implements Constants
         }
         catch(Exception x)
         {
-            log(ERROR, "Could not find valid xml document at: "+ configFile +". Cannot continue... Please check config.xml with an XML validator.");
+            Logger.ERROR( "Could not find valid xml document at: "+ configFile +". Cannot continue... Please check config.xml with an XML validator.");
             return false;
         }
 
         Element root = ConfigXml.getRootElement();
 
-        /*
-         * Needed always
-         */
-        //logging level
+     
+        //Logging Config        
+        String strLogLevel = root.getChildText("LoggingLevel");
         try
         {
-            String strLogLevel = root.getChildText("LoggingLevel");
-            try
-            {
-                LOGGING_LEVEL =  Integer.parseInt(strLogLevel);
-                log(DEBUG, "Logging level is set to: " + LOGGING_LEVEL);
-            }
-            catch(Exception x)
-            {
-                log(DEBUG, "LoggingLevel of \""+strLogLevel+"\" is not an integer, will attempt to use String identifier.");
-                //try getting it from a string.
-                boolean found = false;
-                for(Map.Entry<Integer,String> entry : LOGGING_LEVELS.entrySet())
-                {
-                    if(entry.getValue().equalsIgnoreCase(strLogLevel))
-                    {
-                        LOGGING_LEVEL = entry.getKey();
-                        log(DEBUG, "Logging level of \""+strLogLevel+"\" maps to level: "+ LOGGING_LEVEL);
-                        found = true;
-                        break;
-                    }                    
-                }
-                if(!found) log(WARNING, "Logging level of \""+strLogLevel+"\" is not known, defaulting to level "+ LOGGING_LEVEL +", \""+ LOGGING_LEVELS.get(LOGGING_LEVEL)+"\"");
-            }
-            
-            try
-            {
-                String strExpireDays = root.getChild("LoggingLevel").getAttributeValue("expiredays");
-                if(strExpireDays != null)
-                {
-                    LOG_EXPIRE_DAYS = Integer.parseInt(strExpireDays);
-                }
-            }
-            catch(Exception x2)
-            {
-                log(WARNING, "Failed to parse expiredays attribute in <LoggingLevel>, defaulting to " + LOG_EXPIRE_DAYS,x2);
-            }
-            log(DEBUG, "Logs will be deleted after " + LOG_EXPIRE_DAYS + " days.");
+            LOGGING_LEVEL =  BTVLogLevel.valueOf(strLogLevel.toUpperCase());
+            Logger.DEBUG( "Logging level is set to: " + LOGGING_LEVEL);
         }
         catch(Exception x)
         {
-            LOGGING_LEVEL = 3;
-            LOG_EXPIRE_DAYS = 30;
-            log(WARNING, "Failed while parsing log level, defaulting to level of INFO ("+LOGGING_LEVEL+"), and expire days of "+LOG_EXPIRE_DAYS + " days",x);
+            Logger.DEBUG( "LoggingLevel of \""+strLogLevel+"\" is not valid, will default to " + BTVLogLevel.INFO);               
+            LOGGING_LEVEL =  BTVLogLevel.INFO;
         }
+        Logger.getOptions().setLevelToLogAt(LOGGING_LEVEL);
+
+        try
+        {
+            String strExpireDays = root.getChild("LoggingLevel").getAttributeValue("expiredays");
+            if(strExpireDays != null)
+            {
+                LOG_EXPIRE_DAYS = Integer.parseInt(strExpireDays);
+            }
+        }
+        catch(Exception x2)
+        {
+            LOG_EXPIRE_DAYS = 30;
+            Logger.WARN( "Failed to parse expiredays attribute in <LoggingLevel>, defaulting to " + LOG_EXPIRE_DAYS,x2);
+        }
+        Logger.DEBUG( "Logs will be deleted after " + LOG_EXPIRE_DAYS + " days.");
+        Logger.getOptions().setLogExpireDays(LOG_EXPIRE_DAYS);
+
+        
         
         //JSON-RPC
         Map<String,String> jsonRPCChildren = getChildren(root.getChild("JSONRPC"));
-        JSON_RPC_SERVER = jsonRPCChildren.get("xbmcname");
-        USE_HTTP = "http".equalsIgnoreCase(jsonRPCChildren.get("method"));
-        JSON_RPC_WEBSERVER_PORT = tools.isInt(jsonRPCChildren.get("port")) ? Integer.parseInt(jsonRPCChildren.get("port")) : 8080;
-        JSON_RPC_WEBSERVER_USERNAME = jsonRPCChildren.get("username");
-        JSON_RPC_WEBSERVER_PASSWORD = jsonRPCChildren.get("password");
-        JSON_RPC_TIMEOUT_SECONDS = tools.isInt(jsonRPCChildren.get("timeout")) ? Integer.parseInt(jsonRPCChildren.get("timeout")) : 60;
-        if(IS_THUMB_CLEANER) JSON_RPC_RESPONSE_TIMEOUT_MS *= 1.5;//allow extra timeout because queries aren't as rapid
-        log(INFO, "JSON-RPC config: XBMCName="+JSON_RPC_SERVER+", timeout="+JSON_RPC_TIMEOUT_SECONDS+" seconds, method="+(USE_HTTP ? "HTTP, port="+JSON_RPC_WEBSERVER_PORT+", username="+JSON_RPC_WEBSERVER_USERNAME+", password="+JSON_RPC_WEBSERVER_PASSWORD : "Raw, port=9090"));
+        XBMC_WEB_SERVER_URL = jsonRPCChildren.get("xbmcwebserver");        
+        JSON_RPC_RAW_PORT = tools.isInt(jsonRPCChildren.get("announcementport")) ? Integer.parseInt(jsonRPCChildren.get("announcementport")) : JSON_RPC_RAW_PORT;        
+        Logger.INFO( "JSON-RPC config: XBMC Webserver URL="+XBMC_WEB_SERVER_URL);
+        Logger.INFO( "JSON-RPC AnnouncementPort = "+JSON_RPC_RAW_PORT);        
         
-
-         //thumbnail dir
-        if(IS_THUMB_CLEANER)
-        {
-            Element thumbnailDir = root.getChild("ThumbnailDir");
-            if(thumbnailDir != null)
-            {
-                XBMC_THUMBNAILS_FOLDERS = new ArrayList<String>();//this is a list because it was thought of possible having multiple thumb dirs. TODO: review if this is necessary
-                String strFolder = thumbnailDir.getText();
-                if(strFolder.endsWith("/")||strFolder.endsWith("\\")) strFolder = strFolder.substring(0, strFolder.length()-1);//trim traling slash
-                XBMC_THUMBNAILS_FOLDERS.add(strFolder);
-                log(DEBUG, "XBMC Thumbnail dir = "+ XBMC_THUMBNAILS_FOLDERS.get(0));
-            }
-            else
-            {
-                log(ERROR, "No <ThumbnailDir> element found, cannot continue.");
-                return false;
-            }
-        }
         
         //Database (MySQL or SQLite)
         Element databaseElem = root.getChild("XBMCDatabase");
@@ -317,32 +205,22 @@ public class Config implements Constants
                     DATABASE_TYPE = SQL_LITE;
                     
                     sqlLiteVideoDBPath = sqlite.getChildText("VideoDBPath");
-                    Config.log(INFO, "XBMC SQLite VideoDBPath = "+ sqlLiteVideoDBPath);
+                    Logger.INFO( "XBMC SQLite VideoDBPath = "+ sqlLiteVideoDBPath);
                     if(!new File(sqlLiteVideoDBPath).exists())
                     {
-                        Config.log(ERROR, "No file exists at XBMC SQLite path for video db. Cannot continue. Path = "+ sqlLiteVideoDBPath);
+                        Logger.ERROR( "No file exists at XBMC SQLite path for video db. Cannot continue. Path = "+ sqlLiteVideoDBPath);
                         return false;
                     }
-
-                    if(IS_THUMB_CLEANER)//thumbcleaner uses music DB as well
-                    {
-                        sqlLiteMusicDBPath = sqlite.getChildText("MusicDBPath");
-                        Config.log(INFO, "XBMC SQLite MusicDBPath = "+ sqlLiteMusicDBPath);
-                        if(!new File(sqlLiteMusicDBPath).exists())
-                        {
-                            Config.log(ERROR, "No file exists at XBMC SQLite path for music db. Cannot continue. Path = "+ sqlLiteMusicDBPath);
-                            return false;
-                        }
-                    }                    
+                                    
                 }
                 else
                 {
-                    Config.log(INFO, "SQLite is disabled.");
+                    Logger.INFO( "SQLite is disabled.");
                 }
             }
             else
             {
-                log(WARNING, "<SQLite> element not found. Will look for <MySQL>...");
+                Logger.WARN( "<SQLite> element not found. Will look for <MySQL>...");
             }
 
 
@@ -350,7 +228,7 @@ public class Config implements Constants
              //load XBMC MySQL Server info
             if(SQL_LITE.equals(DATABASE_TYPE))
             {
-                Config.log(INFO, "Skipping MySQL config because SQLite is already enabled.");
+                Logger.INFO( "Skipping MySQL config because SQLite is already enabled.");
             }
             else
             {
@@ -369,10 +247,9 @@ public class Config implements Constants
                     XBMC_MYSQL_PORT = tools.isInt(xbmcMySQLChildren.get("port")) ? Integer.parseInt(xbmcMySQLChildren.get("port")): 3306;
 
 
-                    String ifThumbCleaner = "";
-                    if(IS_THUMB_CLEANER) ifThumbCleaner = ", XBMCMusicSchema="+XBMC_MYSQL_MUSIC_SCHEMA;//thumb cleaner uses music schema too
-                    log(mySQLEnabled ? INFO : DEBUG,"XBMCMySQL config: enabled="+mySQLEnabled+", "+"XBMCServerName="+XBMC_MYSQL_SERVER+", XBMCVideoSchema="+XBMC_MYSQL_VIDEO_SCHEMA+", "
-                        + "MySQLUserName="+XBMC_MYSQL_UN+", MySQLPassword="+XBMC_MYSQL_PW+", MySQLPort="+XBMC_MYSQL_PORT+ifThumbCleaner + ", CharacterSet="+MYSQL_CHARACTER_SET);
+                    String ifThumbCleaner = "";                    
+                    Logger.log(mySQLEnabled ? BTVLogLevel.INFO : BTVLogLevel.DEBUG,"XBMCMySQL config: enabled="+mySQLEnabled+", "+"XBMCServerName="+XBMC_MYSQL_SERVER+", XBMCVideoSchema="+XBMC_MYSQL_VIDEO_SCHEMA+", "
+                        + "MySQLUserName="+XBMC_MYSQL_UN+", MySQLPassword="+XBMC_MYSQL_PW+", MySQLPort="+XBMC_MYSQL_PORT+ifThumbCleaner + ", CharacterSet="+MYSQL_CHARACTER_SET,null);
 
                     //test the connections
                     if(mySQLEnabled)
@@ -386,30 +263,30 @@ public class Config implements Constants
                             String schemaType = entry.getKey();
                             if(schemaType.equals("music") && IS_MY_LIBRARY) continue;//MyLibrary doesnt use music schema, no need to test
                             String schema = entry.getValue();
-                            log(INFO, "Testing connection to XBMC SQL Database "+schemaType+" schema: "+schema);
+                            Logger.INFO( "Testing connection to XBMC SQL Database "+schemaType+" schema: "+schema);
                             XBMCInterface xbmcMySQLConnection = new XBMCInterface(MYSQL, schema);
-                            log(INFO, "Connected successfully = " + xbmcMySQLConnection.isConnected());
+                            Logger.INFO( "Connected successfully = " + xbmcMySQLConnection.isConnected());
                             if(!xbmcMySQLConnection.isConnected())
                             {                                                                
-                                log(ERROR, "Failed to connect to XBMC MySQL Server, "+schemaType+" schema named " + schema+"; Cannot continue.");
+                                Logger.ERROR( "Failed to connect to XBMC MySQL Server, "+schemaType+" schema named " + schema+"; Cannot continue.");
                                 return false;
                             }
                             if(xbmcMySQLConnection != null) xbmcMySQLConnection.close();
                         }//end looping thru schemas
                     }
                 }
-                else log(WARNING, "<XBMCMySQLServer> element not found in config file.");
+                else Logger.WARN( "<XBMCMySQLServer> element not found in config file.");
             }//end if SQLite is not enabled
 
             if(DATABASE_TYPE == null)
             {
-                Config.log(ERROR, "Neither SQLite nor MySQL are enabled in config. Cannot continue.");
+                Logger.ERROR( "Neither SQLite nor MySQL are enabled in config. Cannot continue.");
                 return false;
             }
         }//end database elem is not null
         else
         {
-            Config.log(ERROR, "No <XBMCDatabase> element was found in config. Cannot continue.");
+            Logger.ERROR( "No <XBMCDatabase> element was found in config. Cannot continue.");
             return false;
         }
 
@@ -418,9 +295,9 @@ public class Config implements Constants
         {
             //Restart XBMC before scan
             Element restartXBMCElem = root.getChild("XBMCRestart");
-            if(restartXBMCElem == null)Config.log(WARNING, "No <XBMCRestart> element found, defaulting to restart="+RESTART_XBMC);
+            if(restartXBMCElem == null)Logger.WARN( "No <XBMCRestart> element found, defaulting to restart="+RESTART_XBMC);
             else RESTART_XBMC = "true".equalsIgnoreCase(restartXBMCElem.getAttributeValue("enabled"));
-            log(DEBUG, "XBMCRestart enabled = "+ RESTART_XBMC);                        
+            Logger.DEBUG( "XBMCRestart enabled = "+ RESTART_XBMC);                        
             
             //LibraryScanWaitMinutes
             Element libraryScanWaitMinElem = root.getChild("LibraryScanWaitMinutes");
@@ -432,17 +309,17 @@ public class Config implements Constants
                     LIBRARY_SCAN_WAIT_MINUTES = Double.parseDouble(strMin);
                 }catch(NumberFormatException x)
                 {
-                    Config.log(WARNING, "Invalid number for <LibraryScanWaitMinutes>: \""+strMin+"\" is not a valid decimal, will default to " + LIBRARY_SCAN_WAIT_MINUTES +" minutes.");
+                    Logger.WARN( "Invalid number for <LibraryScanWaitMinutes>: \""+strMin+"\" is not a valid decimal, will default to " + LIBRARY_SCAN_WAIT_MINUTES +" minutes.");
                 }
             }
-            Config.log(DEBUG, "Library scan wait minutes = "+ LIBRARY_SCAN_WAIT_MINUTES);
+            Logger.DEBUG( "Library scan wait minutes = "+ LIBRARY_SCAN_WAIT_MINUTES);
 
             //IP Change
             Element ipChangeElem = root.getChild("IPChange");
             if(ipChangeElem != null)            
                 IP_CHANGE_ENABLED = "true".equalsIgnoreCase(ipChangeElem.getAttributeValue("enabled"));
             
-            Config.log(DEBUG, "IP Change is " + (IP_CHANGE_ENABLED ? "enabled for "+ IP_CHANGES.size()+" changes.":"disabled"));
+            Logger.DEBUG( "IP Change is " + (IP_CHANGE_ENABLED ? "enabled for "+ IP_CHANGES.size()+" changes.":"disabled"));
             if(IP_CHANGE_ENABLED)
             {
                 List<Element> changes = ipChangeElem.getChildren("change");
@@ -452,16 +329,16 @@ public class Config implements Constants
                     String to = change.getAttributeValue("to");
                     if(!valid(from))
                     {
-                        Config.log(WARNING, "Skipping IPChange, from is not valid: \""+from+"\"");
+                        Logger.WARN( "Skipping IPChange, from is not valid: \""+from+"\"");
                         continue;
                     }
                     if(!valid(to))
                     {
-                        Config.log(WARNING, "Skipping IPChange, to is not valid: \""+to+"\"");
+                        Logger.WARN( "Skipping IPChange, to is not valid: \""+to+"\"");
                         continue;
                     }
                     IP_CHANGES.add(new IPChange(from, to));
-                    Config.log(DEBUG, "Added IPChange from: "+from +" to "+ to);
+                    Logger.DEBUG( "Added IPChange from: "+from +" to "+ to);
                 }
             }
             
@@ -471,14 +348,14 @@ public class Config implements Constants
             Element dropboxElem = root.getChild("Dropbox");
             if(dropboxElem == null)
             {
-                log(ERROR, "<Dropbox> config not found. Cannot continue.");
+                Logger.ERROR( "<Dropbox> config not found. Cannot continue.");
                 return false;
             }
 
             String streamingDropbox = dropboxElem.getChildText("streaming");
             if(!valid(streamingDropbox))
             {
-                log(ERROR, "Dropbox was not found in Config.xml. Please verify your <streaming> element is filled in. Cannot contine until this is fixed.");
+                Logger.ERROR( "Dropbox was not found in Config.xml. Please verify your <streaming> element is filled in. Cannot contine until this is fixed.");
                 return false;
             }
             if(streamingDropbox.endsWith("/") || streamingDropbox.endsWith("\\")) streamingDropbox = streamingDropbox.substring(0, streamingDropbox.length()-1);//trim trailing slash
@@ -486,7 +363,7 @@ public class Config implements Constants
             //create the dropbox if it doesnt exist
             File db = new File(DROPBOX);
             if(!db.exists())db.mkdir();
-            log(DEBUG, "Streaming Dropbox = "+ DROPBOX);
+            Logger.DEBUG( "Streaming Dropbox = "+ DROPBOX);
             
             //Linux Samba Prefix - Used to support meta-data alteration on Linux systems
             String linuxSambaPrefix = dropboxElem.getChildText("LinuxSambaPrefix");
@@ -494,51 +371,30 @@ public class Config implements Constants
             {
                 if(linuxSambaPrefix.endsWith("/") || linuxSambaPrefix.endsWith("\\")) linuxSambaPrefix = linuxSambaPrefix.substring(0, linuxSambaPrefix.length()-1);//trim trailing slash
                 LINUX_SAMBA_PREFIX = linuxSambaPrefix;
-                log(DEBUG, "Using Linux Samba Prefix = "+ LINUX_SAMBA_PREFIX);
+                Logger.DEBUG( "Using Linux Samba Prefix = "+ LINUX_SAMBA_PREFIX);
             }
             
             String downloadedDropbox = dropboxElem.getChildText("downloaded");
             if(!valid(downloadedDropbox))
             {
                 //this is expected now that downloading support has been removed
-                //log(ERROR, "Downloaded Dropbox was not found in Config.xml. Please verify your <downloaded> element is filled in. Cannot contine until this is fixed.");
+                //Logger.ERROR( "Downloaded Dropbox was not found in Config.xml. Please verify your <downloaded> element is filled in. Cannot contine until this is fixed.");
                 //return false;
             }
             else
             {
-                log(WARNING, "Downloading is not longer supported for this program. Nothing will be downloaded to: "+ downloadedDropbox);
-                /*
-                if(downloadedDropbox.endsWith("/") || downloadedDropbox.endsWith("\\")) downloadedDropbox = downloadedDropbox.substring(0, downloadedDropbox.length()-1);//trim trailing slash
-                DOWNLOADED_VIDEOS_DROPBOX = downloadedDropbox;
-                //create the dropbox if it doesnt exist
-                File db2 = new File(DOWNLOADED_VIDEOS_DROPBOX);
-                if(!db2.exists())db2.mkdir();
-                log(DEBUG, "Download Dropbox = "+ DOWNLOADED_VIDEOS_DROPBOX);                 
-                 */
+                Logger.WARN( "Downloading is not longer supported for this program. Nothing will be downloaded to: "+ downloadedDropbox);                
             }
 
             //TVDB api key
-            TVDB_API_KEY = "05EB6802977A1FFE";//my key
+            
             OBSCURE_TVDB_KEY_IN_LOG = true;
-            /*
-            try
-            {
-                Element apiKey =  root.getChild("TheTVDBApiKey");
-                TVDB_API_KEY = apiKey.getText();
-
-                OBSCURE_TVDB_KEY_IN_LOG = "true".equalsIgnoreCase(apiKey.getAttributeValue("obscure_in_logs"));                
-            }
-            catch(Exception x)
-            {
-                log(WARNING, "Could not find TheTvDB Api Key in config file. Please make sure your <TheTVDBApiKey> entry is correct. Cannot continue.",x);
-                return false;//api key is required, so end here
-            }
-            */
+            
             if(OBSCURE_TVDB_KEY_IN_LOG)
                 TVDB_API_KEY_OBSCURED = (TVDB_API_KEY.length() > 10 ? ("XXXXXXXXXX"+TVDB_API_KEY.substring(10, TVDB_API_KEY.length())) : "XXXXXXXXXX");
             else
                 TVDB_API_KEY_OBSCURED = TVDB_API_KEY;
-            log(DEBUG, "Found TheTVDB Api Key: " + TVDB_API_KEY_OBSCURED);
+            Logger.DEBUG( "Found TheTVDB Api Key: " + TVDB_API_KEY_OBSCURED);
 
             //ManualArchiving
             Element manualArchivingElem = root.getChild("ManualArchiving");
@@ -553,17 +409,17 @@ public class Config implements Constants
                     }
                     catch(Exception x)
                     {
-                        log(WARNING, "Cannot determine HoursThreshold for ManualArchiving, will use default of: "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours: "+x);
+                        Logger.WARN( "Cannot determine HoursThreshold for ManualArchiving, will use default of: "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours: "+x);
                     }
-                    log(DEBUG, "Manual Archiving is enabled with an HoursThreshold of "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours");
+                    Logger.DEBUG( "Manual Archiving is enabled with an HoursThreshold of "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours");
                 }
                  else
-                     log(DEBUG, "Manual Archiving is disabled.");
+                     Logger.DEBUG( "Manual Archiving is disabled.");
             }
             else
             {
                 MANUAL_ARCHIVING_ENABLED = false;
-                log(WARNING, "<ManuarArchiving> element not found, manual archiving will be disabled.");
+                Logger.WARN( "<ManuarArchiving> element not found, manual archiving will be disabled.");
             }
 
             //VideoCleanUp
@@ -576,9 +432,9 @@ public class Config implements Constants
                 }
                 catch(Exception x)
                 {
-                    log(WARNING, "Cannot determine HoursThreshold for VideoCleanUp, will use default of: "+ MISSING_HOURS_DELETE_THRESHOLD +" hours: "+ x);
+                    Logger.WARN( "Cannot determine HoursThreshold for VideoCleanUp, will use default of: "+ MISSING_HOURS_DELETE_THRESHOLD +" hours: "+ x);
                 }
-                log(DEBUG, "VideoCleanUp has an HoursThreshold of "+ MISSING_HOURS_DELETE_THRESHOLD +" hours");
+                Logger.DEBUG( "VideoCleanUp has an HoursThreshold of "+ MISSING_HOURS_DELETE_THRESHOLD +" hours");
 
                 try
                 {
@@ -586,57 +442,32 @@ public class Config implements Constants
                 }
                 catch(Exception x)
                 {
-                    log(WARNING, "Cannot determine ConsecutiveThreshold for VideoCleanUp, will use default of: "+ MISSING_COUNT_DELETE_THRESHOLD +" hours: "+ x);
+                    Logger.WARN( "Cannot determine ConsecutiveThreshold for VideoCleanUp, will use default of: "+ MISSING_COUNT_DELETE_THRESHOLD +" hours: "+ x);
                 }
-                log(DEBUG, "VideoCleanUp has an ConsecutiveThreshold of "+ MISSING_COUNT_DELETE_THRESHOLD +" consecutive missing times.");
+                Logger.DEBUG( "VideoCleanUp has an ConsecutiveThreshold of "+ MISSING_COUNT_DELETE_THRESHOLD +" consecutive missing times.");
             }
             else
             {              
-                log(WARNING, "<VideoCleanUp> element not found, will use defaults of "+MISSING_HOURS_DELETE_THRESHOLD+" hours and " +MISSING_COUNT_DELETE_THRESHOLD+" consecutive counts");
+                Logger.WARN( "<VideoCleanUp> element not found, will use defaults of "+MISSING_HOURS_DELETE_THRESHOLD+" hours and " +MISSING_COUNT_DELETE_THRESHOLD+" consecutive counts");
             }
 
             Element preScrapeMusicVidsElem = root.getChild("PreScrapeMusicVids");
             if(preScrapeMusicVidsElem == null)
             {
-                Config.log(WARNING, "<PreScrapeMusicVids> element not found, pre-scraping will be disabled for music videos");
+                Logger.WARN( "<PreScrapeMusicVids> element not found, pre-scraping will be disabled for music videos");
                 SCRAPE_MUSIC_VIDEOS = false;
             }
             else
             {
                 SCRAPE_MUSIC_VIDEOS = "true".equalsIgnoreCase(preScrapeMusicVidsElem.getAttributeValue("enabled"));
-                Config.log(DEBUG, "PreScrapeMusicVids enabled = "+ SCRAPE_MUSIC_VIDEOS);
+                Logger.DEBUG( "PreScrapeMusicVids enabled = "+ SCRAPE_MUSIC_VIDEOS);
             }
-
-            /*
-            Element jdownloaderElem = root.getChild("JDownloader");
-            String jdHost = null;
-            if(jdownloaderElem != null)
-                jdHost = jdownloaderElem.getText();
-            if(valid(jdHost))
-            {
-                JDOWNLOADER_HOST = jdHost;
-                Config.log(DEBUG, "JDownloader host = "+ JDOWNLOADER_HOST);
-            }
-            else
-                Config.log(WARNING, "No <JDownloader> host was specified. Will not be able to download files.");
-
-            Element comskipElem = root.getChild("ComSkipDownloadedVideos");
-            if(comskipElem == null)log(WARNING, "No <ComSkipDownloadedVideos> element was found, comskip wil be disabled.");
-            else COMSKIP_DOWNLOADED_VIDEOS = "true".equalsIgnoreCase(comskipElem.getAttributeValue("enabled"));
-            log(DEBUG, "ComSkipDownloadedVideos = "+ COMSKIP_DOWNLOADED_VIDEOS);
-            if(COMSKIP_DOWNLOADED_VIDEOS)
-            {
-                if(tools.isInt(comskipElem.getAttributeValue("type")))
-                    EDL_TYPE = Integer.parseInt(comskipElem.getAttributeValue("type"));
-                log(DEBUG, "Comskip edl type set to: "+ EDL_TYPE);
-            }             
-            */
             
             //get SearchFilters
             Element searchFilters = root.getChild("SearchFilters");
             if(searchFilters == null)
             {
-                log(ERROR, "No <SearchFilters> found, cannot continue.");
+                Logger.ERROR( "No <SearchFilters> found, cannot continue.");
                 return false;
             }
 
@@ -649,14 +480,14 @@ public class Config implements Constants
                 if(!tools.valid(sourcePath))
                 {
                     sourcePath = "";
-                    log(DEBUG, "Source path was not specified. Will try to auto-determine it later.");
+                    Logger.DEBUG( "Source path was not specified. Will try to auto-determine it later.");
                 }
                 else//valid path was specified
                 {
                     //normalize the path (must end with /)
                     if(!sourcePath.endsWith("/")) sourcePath = sourcePath+"/";
                 }
-                log(INFO, "Found source "+sourceName +" with path of "+ (valid(sourcePath) ? sourcePath : "[auto-determine]"));
+                Logger.INFO( "Found source "+sourceName +" with path of "+ (valid(sourcePath) ? sourcePath : "[auto-determine]"));
                 
                                 
                 Source src = new Source(sourceName, sourcePath);
@@ -667,7 +498,7 @@ public class Config implements Constants
                 if(tools.valid(customParser))                                    
                     src.setCustomParser(customParser);//use the specified custom parser name                
                 else src.setCustomParser(src.getName());//use the name as the parser name
-                log(INFO, "Setting source's custom_parser to: "+ src.getCustomParser());
+                Logger.INFO( "Setting source's custom_parser to: "+ src.getCustomParser());
 
                 //get subfolders (allowing nested subfolders)
                 List<Element> topSubfolders = sourceElement.getChildren("subfolder");//these are the subfolders directly under the source
@@ -698,7 +529,7 @@ public class Config implements Constants
                         String subfolderName = inheritName(subfolder);
                         if(!valid(subfolderName))
                         {
-                            log(ERROR, "No name attribute specified for subfolder, it will be skipped!");
+                            Logger.ERROR( "No name attribute specified for subfolder, it will be skipped!");
                             continue;
                         }
                         else//trim a traling slash if it exists
@@ -715,7 +546,7 @@ public class Config implements Constants
                         //Download support has been removed, notify user if they still are requesting it
                         boolean download = "true".equalsIgnoreCase(inherit("download", sourceElement, subfolder));
                         if(download)
-                            log(WARNING, "Found download attribute set to true, but downloading is no longer support. Nothing will be downloaded, but it will still be streamed.");
+                            Logger.WARN( "Found download attribute set to true, but downloading is no longer support. Nothing will be downloaded, but it will still be streamed.");
                         
                         boolean containsMultiPartVideos = "true".equalsIgnoreCase(inherit("multi_part", sourceElement, subfolder));
                         String type = (inherit("type", sourceElement, subfolder));
@@ -724,6 +555,7 @@ public class Config implements Constants
                         String strMaxVideos = (inherit("max_videos", sourceElement, subfolder));
                         int max_vidoes = tools.isInt(strMaxVideos) ? Integer.parseInt(strMaxVideos) : -1;
                         String movie_set = (inherit("movie_set", sourceElement, subfolder));
+                        String strMovieTags = (inherit("movie_tags", sourceElement, subfolder));
                         String prefix = (inherit("prefix", sourceElement, subfolder));
                         String suffix = (inherit("suffix", sourceElement, subfolder));
                         int level_deep = Integer.parseInt(subfolder.getAttributeValue("level_deep"));
@@ -744,6 +576,20 @@ public class Config implements Constants
                         if(max_vidoes > 0) subf.setMaxVideos(max_vidoes);
                         subf.setForceTVDB(forceTVDB);
                         subf.setMovieSet(movie_set);
+                        
+                       
+                        //check for movie tags (split multiple with pipe)
+                        if(valid(strMovieTags)){
+                            List<String> movieTags = new ArrayList<String>();
+                            if(strMovieTags.contains("|"))                            
+                                movieTags.addAll(Arrays.asList(strMovieTags.split("\\|")));
+                            else
+                                movieTags.add(strMovieTags);//single tag
+                            
+                            subf.setMovieTags(movieTags);
+                        }
+                        
+                        
                         subf.setPrefix(prefix);
                         subf.setSuffix(suffix);
                         subf.setCanContainMultiPartVideos(containsMultiPartVideos);
@@ -757,7 +603,7 @@ public class Config implements Constants
                         String indent = "";
                         for(int i=subf.getLevelDeep(); i>=0; i--)indent+="\t";
                             
-                        Config.log(INFO, indent+"Next Subfolder: name="+subf.getFullName()+", recursive="+subf.isRecursive()
+                        Logger.INFO( indent+"Next Subfolder: name="+subf.getFullName()+", recursive="+subf.isRecursive()
                                 +", type="+subf.getType()+", max_series="+subf.getMaxSeries()+", "
                                 + "max_videos="+subf.getMaxVideos()+", movie_set="+subf.getMovieSet()+", prefix="+subf.getPrefix()+", suffix="+subf.getSuffix()+
                                 /*", download="+download+", compression="+(valid(compression) ? compression:"")+*/", multi_part="+containsMultiPartVideos +", force_series="+subf.getForceSeries());
@@ -776,7 +622,7 @@ public class Config implements Constants
                                 for(Element exclude : excludes)
                                 {
                                     subf.addExclude(exclude.getName(), exclude.getText());
-                                    log(DEBUG, indent+"\tAdded Exclude: type="+exclude.getName()+", value="+exclude.getText());
+                                    Logger.DEBUG( indent+"\tAdded Exclude: type="+exclude.getName()+", value="+exclude.getText());
                                 }
                             }
                         }
@@ -790,7 +636,7 @@ public class Config implements Constants
                                 for(Element filter : filters)
                                 {
                                     subf.addFitler(filter.getName(), filter.getText());
-                                    log(DEBUG, indent+"\tAdded subfolder Filter: type="+filter.getName()+", value="+filter.getText());
+                                    Logger.DEBUG( indent+"\tAdded subfolder Filter: type="+filter.getName()+", value="+filter.getText());
                                 }
                             }
                         }
@@ -809,7 +655,7 @@ public class Config implements Constants
                                 for(Element parser : parsers)
                                 {
                                     subf.addParser(parser.getName(), parser.getText());
-                                    log(DEBUG, indent+"\tAdded subfolder Parser: type="+parser.getName()+", value="+parser.getText());
+                                    Logger.DEBUG( indent+"\tAdded subfolder Parser: type="+parser.getName()+", value="+parser.getText());
                                 }
                             }
                         }
@@ -828,155 +674,18 @@ public class Config implements Constants
                 for(Element exclude : excludes)
                 {
                     Exclude.addGlobalExclude(exclude.getName(), exclude.getText());
-                    log(INFO, "Added Global Exclude, type="+exclude.getName()+", value="+exclude.getText());
+                    Logger.INFO( "Added Global Exclude, type="+exclude.getName()+", value="+exclude.getText());
                 }
             }
 
             Element compressionElem = root.getChild("Compression");
             if(compressionElem != null)
-                log(WARNING, "Compression definitions found, but will be ignored because downloading is no longer supported.");
+                Logger.WARN( "Compression definitions found, but will be ignored because downloading is no longer supported.");
             
-            /*
-             * Not needed since downloaded isnt supported
-            //compression definitions            
-            List<Element> defs = compressionElem.getChildren();
-            for(Element def : defs)
-            {
-                String name = def.getName();
-                String encodeTo = def.getChildText("encode_to");
-                String command = def.getChildText("command");
-                if(!tools.valid(encodeTo))
-                {
-                    log(WARNING, "Skipping: Compression definition <"+name+"> does not have a valid <encode_to>");
-                    continue;
-                }
-                if(!tools.valid(command))
-                {
-                    log(WARNING, "Skipping: Compression definition <"+name+"> does not have a valid <command>");
-                    continue;
-                }
-                List<String> verificationLines = new ArrayList<String>();
-                Element verifLinesElem = def.getChild("VerificationLines");
-                if(verifLinesElem == null)
-                {
-                    log(WARNING, "No <VerificationLines> element found for compression definition <"+name+">. Cannot use this compression definition.");
-                    continue;
-                }
-                List<Element> lines = verifLinesElem.getChildren();
-                for(Element line : lines)
-                {
-                    verificationLines.add(line.getText());
-                    log(DEBUG, "Found verification line: "+ line.getText());
-                }
-                if(verificationLines.isEmpty())
-                {
-                    log(WARNING, "No <VerificationLines> exists for the compression definition \""+name+"\". Cannot use this definition.");
-                    continue;
-                }
-                
-                CompressionDefinition cd = new CompressionDefinition(name, command, encodeTo, verificationLines);
-                if(COMPRESSION_DEFINITIONS.get(cd.getName().toLowerCase()) != null)
-                {
-                    log(WARNING, "A compression definition named \""+name+"\" (case-insensitive) already exists. Will not skip this one.");
-                    continue;
-                }
-                COMPRESSION_DEFINITIONS.put(cd.getName().toLowerCase(), cd);
-                log(DEBUG, "Added compression definition named \""+name+"\" with encode_to = "+ encodeTo +", command = "+ command);                 
-                 
-            }
-            * */             
+              
         }//end if IS_MY_LIBRARY
 
-        //specific config for thumb cleaner
-        if(IS_THUMB_CLEANER)
-        {
-            //simulation
-            Element simulationElem = root.getChild("Simulation");
-            if(simulationElem == null)
-            {
-                log(WARNING, "No <Simulation> elment found. Setting simulation = true");
-                SIMULATION=true;
-            }
-            else
-                SIMULATION = !"false".equalsIgnoreCase((simulationElem.getText()).trim());//default to true to be safe
-            
-            Config.log(INFO, "Simulation = "+ SIMULATION);
-
-            Element confirmExistsElem = root.getChild("ConfirmPathsExist");
-            if(confirmExistsElem == null)
-            {
-                log(WARNING, "No <ConfirmPathsExist> elment found. Setting ConfirmPathsExist = false");
-                CONFIRM_PATHS_EXIST = false;
-            }
-            else
-                CONFIRM_PATHS_EXIST = "true".equalsIgnoreCase(confirmExistsElem.getText());
-            log(INFO, "ConfirmPathsExist = "+ CONFIRM_PATHS_EXIST);
-
-            //SpotCheck
-            Element spotcheck = root.getChild("SpotCheck");
-            if(spotcheck != null)
-            {
-                SPOT_CHECK_DIR = spotcheck.getText();
-                if(tools.valid(SPOT_CHECK_DIR) && SPOT_CHECK_DIR.endsWith(SEP))
-                    SPOT_CHECK_DIR = SPOT_CHECK_DIR.substring(0, SPOT_CHECK_DIR.length()-SEP.length());//trim trailing slash
-                try{SPOT_CHECK_MAX_IMAGES = Integer.parseInt(spotcheck.getAttributeValue("max"));}catch(Exception x){}
-                Config.log(INFO, "SpotCheck directory = " + SPOT_CHECK_DIR+", max images = "+ SPOT_CHECK_MAX_IMAGES);
-            }
-            else
-            {
-                Config.log(INFO, "No <SpotCheck> element found. Spot check will be disabled");
-                SPOT_CHECK_DIR = null;
-            }
-
-            //Textures
-            try
-            {
-                Element texturesElem = root.getChild("XBMCTextures");
-                if(texturesElem == null) throw new Exception("No <XBMCTexturesDB> elem found.");
-
-                //enable/disable
-                CLEAN_TEXTURES = "true".equalsIgnoreCase(texturesElem.getAttributeValue("cleanup"));
-                if(CLEAN_TEXTURES)
-                {
-                //db path
-                Element textureDBPathElem = texturesElem.getChild("TextureDBPath");
-                if(textureDBPathElem == null) throw new Exception("No <TextureDBPath> found.");
-                sqlLiteTexturesDBPath = textureDBPathElem.getText();
-                if(!valid(sqlLiteMusicDBPath))throw new Exception("No path to Textures.db was specified in <TextureDBPath> element. Cannot continue");
-                log(INFO, "Path to Textures.db = "+ sqlLiteTexturesDBPath);
-
-                //last used threshold
-                Element lastUsedThresholdElem = texturesElem.getChild("LastUsedThresholdDays");
-                if(lastUsedThresholdElem == null) throw new Exception("No <LastUsedThresholdDays> found.");
-                try{TEXTURE_LAST_USED_DAYS_THRESHOLD = Double.parseDouble(lastUsedThresholdElem.getText());}
-                catch(Exception x){log(WARNING, "Could not find vaild number for <LastUsedThresholdDays>, defaulting to: "+ TEXTURE_LAST_USED_DAYS_THRESHOLD +" days");}                
-                log(INFO, "Texture last used threshold = "+ TEXTURE_LAST_USED_DAYS_THRESHOLD +" days ago.");
-
-                //and/or
-                Element andOrElem = texturesElem.getChild("AndOr");
-                if(andOrElem == null) throw new Exception("No <AndOr> element found.");
-                String andOrTxt = andOrElem.getText();
-                if(!valid(andOrTxt)) throw new Exception("Nothing specified in <AndOr> element.");
-                andOrTxt = andOrTxt.trim();
-                if(!"and".equalsIgnoreCase(andOrTxt) && !"or".equalsIgnoreCase(andOrTxt)) throw new Exception("Invalid config for <AndOr>, must be either \"and\" or \"or\", found: \""+andOrTxt+"\"");
-                TEXTURE_AND_OR_FOR_THRESHOLD = andOrTxt.toLowerCase();
-                
-                //use count threshold
-                Element useCountThresholdElem = texturesElem.getChild("UseCountThreshold");
-                if(useCountThresholdElem == null) throw new Exception("No <UseCountThreshold> found.");
-                try{TEXTURE_USE_COUNT_THRESHOLD = Integer.parseInt(useCountThresholdElem.getText());}
-                catch(Exception x){log(WARNING, "Could not find vaild number for <UseCountThreshold>, defaulting to: "+ TEXTURE_USE_COUNT_THRESHOLD);}
-                log(INFO, "Texture use count threshold = "+ TEXTURE_USE_COUNT_THRESHOLD +". Textures that have been used less than "+ TEXTURE_USE_COUNT_THRESHOLD +" times will be deleted.");
-                }
-                else
-                    log(INFO, "Texture cleanup is disabled because the cleanup attribute is not set to true, skipping...");
-            }
-            catch(Exception x)
-            {
-                log(ERROR, "Error with <XBMCTexturesDB> configuration: "+ x,x);
-                return false;
-            }
-        }                               
+        
         return true;//got to end w/o issues
     }
 
@@ -986,7 +695,7 @@ public class Config implements Constants
         boolean isAUniqueSource = !ALL_SOURCES.contains(src);
         if(!isAUniqueSource)
         {
-            log(ERROR, "The is more than 1 source element named \""+src.getName()+"\" (case-insensitive). "
+            Logger.ERROR( "The is more than 1 source element named \""+src.getName()+"\" (case-insensitive). "
                 + "This is not allowed. Please use unique source names. Only the first source with this name will be used.");
             return false;
         }
@@ -1002,8 +711,8 @@ public class Config implements Constants
     private boolean initializeSQLiteDbs()
     {
         //Archived Files tracker database
-        final String archivedFilesDbLocation = BASE_PROGRAM_DIR+SEP+"res"+SEP+"ArchivedFiles.db";                
-        Config.log(INFO, "Initializing SQLite database at: "+ archivedFilesDbLocation);
+        final String archivedFilesDbLocation = BASE_DIR+SEP+"res"+SEP+"ArchivedFiles.db";                
+        Logger.INFO( "Initializing SQLite database at: "+ archivedFilesDbLocation);
         archivedFilesDB = new ArchivedFilesDB(archivedFilesDbLocation);
         //create the db table if it doesnt exist
         try
@@ -1096,7 +805,7 @@ public class Config implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Error while initializing SQLite database: "+ archivedFilesDbLocation,x);
+            Logger.ERROR( "Error while initializing SQLite database: "+ archivedFilesDbLocation,x);
             return false;
         }
         finally
@@ -1105,8 +814,8 @@ public class Config implements Constants
         }
 
         //Queued Meta Data Changes tracker database
-        final String queuedMetaDataChangesLocation = BASE_PROGRAM_DIR+SEP+"res"+SEP+"QueuedMetaDataChanges.db";
-        Config.log(INFO, "Initializing SQLite database at: "+ queuedMetaDataChangesLocation);
+        final String queuedMetaDataChangesLocation = BASE_DIR+SEP+"res"+SEP+"QueuedMetaDataChanges.db";
+        Logger.INFO( "Initializing SQLite database at: "+ queuedMetaDataChangesLocation);
         queuedChangesDB = new QueuedChangesDB(queuedMetaDataChangesLocation);
         //create the db table if it doesnt exist
         try
@@ -1123,7 +832,7 @@ public class Config implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Error while initializing SQLite database: "+queuedMetaDataChangesLocation,x);
+            Logger.ERROR( "Error while initializing SQLite database: "+queuedMetaDataChangesLocation,x);
             return false;
         }
         finally
@@ -1132,8 +841,8 @@ public class Config implements Constants
         }
 
         //scraper query database
-        final String scraperDBLocation = BASE_PROGRAM_DIR+SEP+"res"+SEP+"scraper.db";
-        Config.log(INFO, "Initializing SQLite database at: "+ scraperDBLocation);
+        final String scraperDBLocation = BASE_DIR+SEP+"res"+SEP+"scraper.db";
+        Logger.INFO( "Initializing SQLite database at: "+ scraperDBLocation);
         scraperDB = new ScraperDB(scraperDBLocation);
         //create the db table if it doesnt exist
         try
@@ -1148,7 +857,7 @@ public class Config implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Error while initializing SQLite database: "+scraperDBLocation,x);
+            Logger.ERROR( "Error while initializing SQLite database: "+scraperDBLocation,x);
             return false;
         }
         finally
@@ -1169,48 +878,7 @@ public class Config implements Constants
             map.put(child.getName().toLowerCase(), child.getText());
         }
         return map;
-    }
-
-    //Dynamically determine where this program is running
-    public static String getBaseDirectory()
-    {
-        try
-        {
-            String fullDir = new File(Config.class.getProtectionDomain().getCodeSource().getLocation().getPath()).toString();//looks like "C:\SVN\SageXBMC\build\classes"
-            //System.out.println("FullDir = " + fullDir);
-            String baseDir;
-            try
-            {
-               baseDir =  fullDir.substring(0, fullDir.indexOf("\\build"));//trim off \build\classes to get to base dir
-            }
-            catch(Exception x)
-            {
-                try
-                {
-                   baseDir =  fullDir.substring(0, fullDir.indexOf("\\dist"));//trim off \build\classes to get to base dir
-                }
-                catch(Exception x2)
-                {
-                    baseDir = null;
-                }
-            }
-
-            if(baseDir != null)
-            {
-                //System.out.println("Successfully found baseDir: "+ baseDir);
-                return baseDir.replace("%20", " ");
-            }
-            else
-                throw new Exception("Cannot find base directory from \""+fullDir+"\"");
-
-        }
-        catch(Exception x)
-        {
-            System.out.println("Cannot determine base directory, please make sure you program is located at "+BASE_PROGRAM_DIR);
-            x.printStackTrace();
-            return BASE_PROGRAM_DIR;
-        }
-    }
+    }    
 
     /*          
      * The list is always sorted with the highest parent at the beginning.
@@ -1278,7 +946,7 @@ public class Config implements Constants
             String name = elem.getAttributeValue("name");
             if(!valid(name))
             {
-                log(ERROR, "A subfolder does not have a valid name attribute. Cannot continue");
+                Logger.ERROR( "A subfolder does not have a valid name attribute. Cannot continue");
                 return null;
             }
             name = name.trim();
@@ -1332,7 +1000,7 @@ public class Config implements Constants
     }
     public static String escapePath(String path)
     {
-        String escaped = path.replace(DELIM, "/");
+        String escaped = path.replace(xbmc.util.Constants.DELIM, "/");
         return escaped;
     }
 
@@ -1343,121 +1011,15 @@ public class Config implements Constants
     }
 
     
-    //log to sytem out, current log, and historical log
-    private static String previousLogString = "";
-    private static int logRepeatCount = 0;
-    private static int PREFIX_LENGTH = 8, SHORT_DESC_LENGTH = 16;
-    public static void log(int level, String logString)
-    {
-        log(level,logString,null);//no throwable
-    }
-    public static void log(int level, String logString, Exception ex)
-    {
-        log(level,logString,null,ex);//no short description         
-    }
-    public static void log(int level, String logString, String shortDesc, Exception ex)
-    {
-        //lower level means more severe
-        if(level <= LOGGING_LEVEL)
-        {
-            if(logString==null)logString="";
-            String strLevel = LOGGING_LEVELS.get(level);
-            if(!valid(strLevel)) strLevel ="UNKNOWN";            
-            
-            String exception = tools.getStacktraceAsString(ex);//null if no exception
-            if(valid(exception)) exception = LINE_BRK+exception;
-            else exception = "";
-            
-            java.util.Date now = new java.util.Date();
-            String prefix = log_sdf.format(now) + " "+ tools.tfl(strLevel,PREFIX_LENGTH);
-
-            String shortDescToUse = (shortDesc == null ? shortLogDesc : shortDesc);
-            if(!valid(shortDescToUse)) shortDescToUse = " ";
-            shortDescToUse = tools.tfl(shortDescToUse, SHORT_DESC_LENGTH)+" ";
-
-            if(OBSCURE_TVDB_KEY_IN_LOG && logString.contains(TVDB_API_KEY)) logString = logString.replace(TVDB_API_KEY, TVDB_API_KEY_OBSCURED);
-            logString += exception;
-            logString = logString.replace("\n", "\n"+tools.tfl(" ", prefix.length()+shortDescToUse.length())+tools.tfl(" ", 4));//indent new lines the length of the prefix plus a tab
-            if(logString.equals(previousLogString))
-            {
-                logRepeatCount++;
-            }
-            else//a different line
-            {                 
-                if(logRepeatCount > 0)
-                {
-                     String repeatNoticeLine = log_sdf.format(now) + " "+ tools.tfl("INFO",PREFIX_LENGTH)//same as prefix, but with INFO hard coded
-                                                 + tools.tfl("Repeat",SHORT_DESC_LENGTH)
-                                                 + " Previous line repeats "+ logRepeatCount + (logRepeatCount==1 ? " time":" times") +LINE_BRK;
-                     logLine(repeatNoticeLine);
-                     logRepeatCount = 0;
-                }
-                                
-                //always log the normal line
-                String line = prefix + shortDescToUse+ logString + LINE_BRK;
-                logLine(line);
-
-                //reset and track previous vals                
-                previousLogString = logString;
-            }
-        }       
-    }
-
-    private static void logLine(String line)
-    {
-        System.out.print(line);//print to screen without waiting for queue. Only queue for file write
-        if(logger != null) logger.queueLine(line);
-    }
-
-    public void logFileExpiration()
-    {
-        try
-        {
-            setShortLogDesc("LogExpiration");
-            File logDir = new File(BASE_PROGRAM_DIR +"\\logs");
-            Iterator<File> logFiles = FileUtils.iterateFiles(logDir, new String[]{"log"}, true);//get all log files, recursive=true
-
-            long cutoff = System.currentTimeMillis() - (ONE_DAY*LOG_EXPIRE_DAYS);
-            log(INFO, "Deleting logfiles older than "+LOG_EXPIRE_DAYS+" days (" + log_sdf.format(new java.util.Date(cutoff))+")");
-            int numberDeleted = 0;
-            int numberChecked = 0;
-            while(logFiles.hasNext())
-            {                
-                File logFile = logFiles.next();
-                if(!logFile.getName().contains(logFileNameNoExt)) continue;//only clean up this program's log files
-                numberChecked++;
-                long lastModified = logFile.lastModified();
-                long daysOld = (System.currentTimeMillis() - lastModified) / ONE_DAY;
-                if(lastModified < cutoff)
-                {
-                    log(INFO, "Deleting this log file, it is " +daysOld+ " days old: "+ logFile);
-                    if(logFile.delete())
-                    {
-                        numberDeleted++;
-                        log(INFO,"Successfully deleted.");
-                    }
-                    else
-                        log(INFO, "Failed to delete, will try again next time.");
-                }
-                else
-                    log(DEBUG, "Not expired, only " + daysOld +" days old (" + log_sdf.format(new java.util.Date(lastModified))+"): "+ logFile);
-            }
-            log(numberDeleted > 0 ? NOTICE : INFO, "Checked " + numberChecked + " log files, deleted " + numberDeleted +" expired log files.");
-        }
-        catch(Exception x)
-        {
-            log(ERROR, "Failed to clean up log files: "+ x,x);
-        }
-    }
     
+    public static int SHORT_DESC_LENGTH = 16;
+   
     public static void end()
-    {
-        try{if(SINGLE_INSTANCE_SOCKET != null) SINGLE_INSTANCE_SOCKET.close();}
-        catch(Exception x){Config.log(WARNING, "Failed to close single instance socket...",x);}
-        finally{SINGLE_INSTANCE_SOCKET=null;}
-        if(logger != null)logger.canStop();        
+    {                                
         if(queuedChangesDB != null)queuedChangesDB.close();
         if(archivedFilesDB != null)archivedFilesDB.close();
-        if(scraperDB != null)scraperDB.close();                        
+        if(scraperDB != null)scraperDB.close();               
+        Logger.NOTICE("Ended: "+PROGRAM_NAME+", v"+VERSION+", compatible with XBMC "+ XBMC_COMPATIBILITY);
+        if(Logger != null) Logger.close();
     }
 }

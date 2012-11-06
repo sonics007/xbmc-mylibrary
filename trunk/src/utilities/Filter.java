@@ -4,7 +4,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-
+import static utilities.Constants.*;
 public class Filter
 {
     public static boolean FilterMatch(String path, int runtime, Map<String, List<String>> filters)
@@ -162,7 +162,7 @@ public class Filter
                 }
                 else
                 {
-                     Config.log(Config.WARNING, "Unknown filter type: \""+type+"\"");
+                     Logger.WARN( "Unknown filter type: \""+type+"\"");
                 }
             }
         }

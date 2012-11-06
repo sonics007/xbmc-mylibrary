@@ -1,6 +1,6 @@
 
 package utilities;
-
+import static utilities.Constants.*;
 
 public class Hash
 {
@@ -51,7 +51,7 @@ public class Hash
        }
        catch(Exception x)
        {
-           Config.log(Config.ERROR, "Cannot generate CRC hash from string \""+source+"\". Error: "+x.getMessage(),x);
+           Logger.ERROR( "Cannot generate CRC hash from string \""+source+"\". Error: "+x.getMessage(),x);
            return null;
        }
        

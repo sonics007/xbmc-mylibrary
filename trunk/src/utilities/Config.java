@@ -39,8 +39,7 @@ public class Config extends Constants
     public static boolean SCRAPE_MUSIC_VIDEOS = true;
         
     public static double MISSING_HOURS_DELETE_THRESHOLD = 12.0;
-    public static int MISSING_COUNT_DELETE_THRESHOLD = 3;
-    public static double LIBRARY_SCAN_WAIT_MINUTES = 2.0;
+    public static int MISSING_COUNT_DELETE_THRESHOLD = 3;    
 
     //populated with chars that cant be used in windows file names
     public static Map<Integer,String> ILLEGAL_FILENAME_CHARS = new HashMap<Integer,String>();
@@ -87,7 +86,7 @@ public class Config extends Constants
     public static int SPOT_CHECK_MAX_IMAGES = 150;
     public static String SPOT_CHECK_DIR;
     public static boolean SIMULATION;
-    public static String MYSQL_CHARACTER_SET = "latin1";//default is latin1
+    
     //sdf's
     public static final SimpleDateFormat tvdbFirstAiredSDF = new SimpleDateFormat("yyyy-MM-dd");//for lookup on thetvdb based on first aired date
     public static final SimpleDateFormat log_sdf = new SimpleDateFormat("MM/dd/yyyy hh:mm:ss a");//for logging    
@@ -240,8 +239,7 @@ public class Config extends Constants
                     mySQLEnabled = "true".equalsIgnoreCase(xbmcMySQL.getAttributeValue("enabled"));
                     XBMC_MYSQL_SERVER = xbmcMySQLChildren.get("host");
                     XBMC_MYSQL_VIDEO_SCHEMA = xbmcMySQLChildren.get("videoschema");
-                    if(valid(xbmcMySQLChildren.get("musicschema"))) XBMC_MYSQL_MUSIC_SCHEMA = xbmcMySQLChildren.get("musicschema");
-                    if(valid(xbmcMySQLChildren.get("characterset"))) MYSQL_CHARACTER_SET = xbmcMySQLChildren.get("characterset");
+                    if(valid(xbmcMySQLChildren.get("musicschema"))) XBMC_MYSQL_MUSIC_SCHEMA = xbmcMySQLChildren.get("musicschema");                    
                     XBMC_MYSQL_UN = xbmcMySQLChildren.get("username");
                     XBMC_MYSQL_PW = xbmcMySQLChildren.get("password");
                     XBMC_MYSQL_PORT = tools.isInt(xbmcMySQLChildren.get("port")) ? Integer.parseInt(xbmcMySQLChildren.get("port")): 3306;
@@ -249,7 +247,7 @@ public class Config extends Constants
 
                     String ifThumbCleaner = "";                    
                     Logger.log(mySQLEnabled ? BTVLogLevel.INFO : BTVLogLevel.DEBUG,"XBMCMySQL config: enabled="+mySQLEnabled+", "+"XBMCServerName="+XBMC_MYSQL_SERVER+", XBMCVideoSchema="+XBMC_MYSQL_VIDEO_SCHEMA+", "
-                        + "MySQLUserName="+XBMC_MYSQL_UN+", MySQLPassword="+XBMC_MYSQL_PW+", MySQLPort="+XBMC_MYSQL_PORT+ifThumbCleaner + ", CharacterSet="+MYSQL_CHARACTER_SET,null);
+                        + "MySQLUserName="+XBMC_MYSQL_UN+", MySQLPassword="+XBMC_MYSQL_PW+", MySQLPort="+XBMC_MYSQL_PORT+ifThumbCleaner,null);
 
                     //test the connections
                     if(mySQLEnabled)
@@ -297,22 +295,8 @@ public class Config extends Constants
             Element restartXBMCElem = root.getChild("XBMCRestart");
             if(restartXBMCElem == null)Logger.WARN( "No <XBMCRestart> element found, defaulting to restart="+RESTART_XBMC);
             else RESTART_XBMC = "true".equalsIgnoreCase(restartXBMCElem.getAttributeValue("enabled"));
-            Logger.DEBUG( "XBMCRestart enabled = "+ RESTART_XBMC);                        
+            Logger.DEBUG( "XBMCRestart enabled = "+ RESTART_XBMC);                                                
             
-            //LibraryScanWaitMinutes
-            Element libraryScanWaitMinElem = root.getChild("LibraryScanWaitMinutes");
-            if(libraryScanWaitMinElem != null)
-            {
-                String strMin = libraryScanWaitMinElem.getText().trim();
-                try
-                {
-                    LIBRARY_SCAN_WAIT_MINUTES = Double.parseDouble(strMin);
-                }catch(NumberFormatException x)
-                {
-                    Logger.WARN( "Invalid number for <LibraryScanWaitMinutes>: \""+strMin+"\" is not a valid decimal, will default to " + LIBRARY_SCAN_WAIT_MINUTES +" minutes.");
-                }
-            }
-            Logger.DEBUG( "Library scan wait minutes = "+ LIBRARY_SCAN_WAIT_MINUTES);
 
             //IP Change
             Element ipChangeElem = root.getChild("IPChange");

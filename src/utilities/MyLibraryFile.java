@@ -14,34 +14,47 @@ import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static utilities.Constants.*;
 
-
-public class XBMCFile implements Constants
+public class MyLibraryFile extends xbmc.util.XBMCFile
 {
-    public static void main(String[]xxx){
-        System.out.println(new XBMCFile("Netflix-zXz-Instant Queue-zXz-Alphabetical-zXz-W-zXz-Wallace & Gromit in Three Amazing...-zXz-01: A Close Shave").stripExtras(" Gettysburg (HD)"));
-    }
-    String fanart, file, fileLabel, thumbnail, parentPath, type, title, series, artist;
     int episodeNumber=-1, seasonNumber=-1, year=-1;
     String tvdbId;
     String originalAirDate;
-    Subfolder subfolder;
     String finalLocation = null;
     boolean hasBeenLookedUpOnTVDB = false;
-    String fileOrDir;
     private boolean skippedBecauseAlreadyArchived = false;
-	
-	//AngryCamel - 20120805 2351
-	int runtime=0;
     
+    protected Subfolder subfolder;
     
     ///for multi-file vidoes
     private boolean isDuplicate = false;
     private boolean isMultiFile = false;
-    public List<XBMCFile> duplicateVideos = null;
-    private XBMCFile originalVideo = null;
-
-    public static void copyVideoMetaData(XBMCFile source, XBMCFile dest)
+    public List<MyLibraryFile> duplicateVideos = null;
+    private MyLibraryFile originalVideo = null;
+        
+    
+    	//AngryCamel - 20120805 2351 - Added runtime
+    public MyLibraryFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime, String parentPath, Subfolder matchingSubfolder)
+    {
+        super(fileOrDir, fanart, file, fileLabel, thumbnail, runtime, parentPath);        
+        this.subfolder = matchingSubfolder;
+    }
+    
+    //AngryCamel - 20120805 2351 - Added runtime
+    public MyLibraryFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime)
+    {
+        super(fileOrDir, fanart, file, fileLabel, thumbnail, runtime);
+        
+    }
+    
+    //limited constructor used in manual archiving
+    public MyLibraryFile(String fullPlayonPath)
+    {
+        super(fullPlayonPath);        
+    }
+    
+    public static void copyVideoMetaData(MyLibraryFile source, MyLibraryFile dest)
     {
         dest.setTitle(source.getTitle());
         dest.setType(source.getType());
@@ -61,49 +74,22 @@ public class XBMCFile implements Constants
         dest.setTVDBId(source.getTVDBId());
         dest.setYear(source.getYear());
     }
-	
-	//AngryCamel - 20120805 2351 - Added runtime
-    public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime, String parentPath, Subfolder matchingSubfolder)
+    
+       public void setSubfolder(Subfolder subf)
     {
-        this.fileOrDir = fileOrDir;
-        this.fanart = fanart;
-        this.file = file;
-        this.fileLabel = fileLabel;// == null ? null : fileLabel.replace("/", "-");
-        this.thumbnail = thumbnail;
-		
-		//AngryCamel - 20120805 2351
-        this.runtime = runtime;
-		
-        this.parentPath = parentPath;
-        this.subfolder = matchingSubfolder;
+        this.subfolder = subf;
     }
     
-    //AngryCamel - 20120805 2351 - Added runtime
-	public XBMCFile(String fileOrDir, String fanart, String file, String fileLabel, String thumbnail, int runtime)
+    public Subfolder getSubfolder()
     {
-        this.fileOrDir = fileOrDir;
-        this.fanart = fanart;
-        this.file = file;
-        this.fileLabel = fileLabel;// == null ? null : fileLabel.replace("/", "-");
-        this.thumbnail = thumbnail;
-		
-		//AngryCamel - 20120805 2351
-        this.runtime = runtime;
+        return this.subfolder;
     }
     
-    //limited constructor used in manual archiving
-    public XBMCFile(String fullPlayonPath)
-    {
-        String[] parts = fullPlayonPath.split(DELIM);
-        this.fileLabel = parts[parts.length-1];
-        this.parentPath= fullPlayonPath.substring(0, fullPlayonPath.lastIndexOf(DELIM));
-    }
-   
-    public void setOriginalVideo(XBMCFile video)
+    public void setOriginalVideo(MyLibraryFile video)
     {
         this.originalVideo = video;
     }
-    public XBMCFile getOriginalVideo()
+    public MyLibraryFile getOriginalVideo()
     {
         return originalVideo;
     }
@@ -127,26 +113,17 @@ public class XBMCFile implements Constants
     {
         this.isMultiFile = b;
         if(duplicateVideos == null)
-            duplicateVideos = new ArrayList<XBMCFile>();
+            duplicateVideos = new ArrayList<MyLibraryFile>();
     }
-    public void setAsDuplicateTo(XBMCFile originalVideo)
+    public void setAsDuplicateTo(MyLibraryFile originalVideo)
     {
         this.isDuplicate=true;
         this.originalVideo = originalVideo;
 
     }
-    public void addDuplicateVideo(XBMCFile video)
+    public void addDuplicateVideo(MyLibraryFile video)
     {
         duplicateVideos.add(video);
-    }
-
-    public boolean isFile()
-    {
-        return fileOrDir.equals(FILE);
-    }
-    public boolean isDirectory()
-    {
-        return fileOrDir.equals(DIRECTORY);
     }
     public void setHasBeenLookedUpOnTVDB(boolean hasBeenLookedUpOnTVDB)
     {
@@ -163,15 +140,6 @@ public class XBMCFile implements Constants
     public String getFinalLocation()
     {
         return finalLocation;
-    }
-
-    public void setSubfolder(Subfolder subf)
-    {
-        this.subfolder = subf;
-    }
-    public Subfolder getSubfolder()
-    {
-        return subfolder;
     }
       public boolean addTVDBSeriesEpisodeNumbers(String seasonNumber, String episodeNumber)
     {
@@ -258,22 +226,24 @@ public class XBMCFile implements Constants
     {
         return year != -1;
     }
+    
+    
     public void setSeries(String series)
     {                
     	//AngryCamel - 20120817 1620
     	//   Check if there is a forced series in the subfolder config and apply it instead of whatever was passed.
     	try {
-			if(tools.valid(this.getSubfolder().getForceSeries()))
-			{
-				this.series = stripExtras(this.getSubfolder().getForceSeries());
-			}
-			else
-			{
-				this.series = stripExtras(series);
-			}
-		} catch (Exception e) {
-			this.series = stripExtras(series);
-		}
+                if(tools.valid(this.getSubfolder().getForceSeries()))
+                {
+                        this.series = stripExtras(this.getSubfolder().getForceSeries());
+                }
+                else
+                {
+                        this.series = stripExtras(series);
+                }
+        } catch (Exception e) {
+                this.series = stripExtras(series);
+        }
     }
     
     public String getSeries()
@@ -343,14 +313,6 @@ public class XBMCFile implements Constants
         return GENERIC.equals(type);
     }
     
-    public String getFanart()
-    {
-        return fanart;
-    }
-    public String getFile()
-    {
-        return file;
-    }
     public String getFileList()
     {
         if(!isMultiFileVideo()) return file;
@@ -360,9 +322,9 @@ public class XBMCFile implements Constants
             //get a mapof all the file labels and the corresponding file
             Map<String, String> fileMap = new TreeMap<String,String>();
 
-            for(Iterator<XBMCFile> it = duplicateVideos.iterator(); it.hasNext();)
+            for(Iterator<MyLibraryFile> it = duplicateVideos.iterator(); it.hasNext();)
             {
-                XBMCFile video = it.next();
+                MyLibraryFile video = it.next();
                 if(video.getFileLabel().toLowerCase().contains("full"))
                 {
                     return video.getFile();//this is a full file, dont need to get the others
@@ -394,42 +356,7 @@ public class XBMCFile implements Constants
             return files.replaceAll("\\r\\n"+"$", "");//remove the last line break ($ means end of string)
         }
     }
-    public String getFileLabel()
-    {
-        return fileLabel;
-    }
-    public void setFileLabel(String fileLabel)
-    {
-        this.fileLabel=fileLabel;
-    }
-
-    public String getThumbnail()
-    {
-        return thumbnail;
-    }
-    public String getFullPathEscaped()
-    {
-        return Config.escapePath(getParentPath()+"/"+getFileLabel());
-    }
-    public String getParentPathEscaped()
-    {
-        return Config.escapePath(getParentPath());
-    }
-    public String getFullPath()
-    {
-        return getParentPath() +DELIM+getFileLabel();
-    }
-    public String getParentPath()
-    {
-        return parentPath;
-    }
-	
-	//AngryCamel - 20120805 2351
-    public int getRuntime()
-    {
-        return runtime;
-    }
-
+    
     public String stripExtras(String source)
     {
         if(!tools.valid(source)) return source;        
@@ -465,4 +392,5 @@ public class XBMCFile implements Constants
         }        
         return withinLimits;
     }
+    
 }

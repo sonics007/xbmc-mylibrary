@@ -1,5 +1,6 @@
 package utilities;
 
+import btv.logger.BTVLogLevel;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -7,7 +8,9 @@ import java.util.regex.*;
 
 import org.apache.commons.io.FileUtils;
 
-public class Archiver implements Runnable, Constants
+import static utilities.Constants.*;
+
+public class Archiver implements Runnable
 {
 
     public static void main(String[] args) throws IOException
@@ -16,14 +19,14 @@ public class Archiver implements Runnable, Constants
         //PlayOn/Hulu/Popular/Popular Episodes/Cops - s23e15: Cops: Dazed & Confused #3
         //PlayOn/Netflix/Instant Queue/Alphabetical/2/24: Season 1/01: 12:00 Midnight-1:00 A.M
         //Netflix/Instant Queue/Alphabetical/M/MythBusters/Collection 1/02: Barrel of Bricks
-        new Config(MY_LIBRARY).loadConfig();
+        new Config().loadConfig();
         Source src = new Source("testing","testing");
         Archiver a = new Archiver(src);
 
         String name = "PlayOn/Netflix/Instant Queue/Alphabetical/M/MythBusters/Collection 1/02: Barrel of Bricks";
-        Config.LOGGING_LEVEL = DEBUG;
-        log(INFO,"TESTING: "+name);
-        XBMCFile video = new XBMCFile(name.replace("/", DELIM));
+        Config.LOGGING_LEVEL = BTVLogLevel.DEBUG;
+        Logger.INFO("TESTING: "+name);
+        MyLibraryFile video = new MyLibraryFile(name.replace("/", xbmc.util.Constants.DELIM));
         video.setType(TV_SHOW);
         
         src.setCustomParser("playon");
@@ -31,15 +34,15 @@ public class Archiver implements Runnable, Constants
         a.subf = subf;
         video.setSubfolder(subf);
         //String sxxExx = findSeasonEpisodeNumbers(video);
-        //log(INFO, "SxxExx = "+ sxxExx);
+        //Logger.INFO( "SxxExx = "+ sxxExx);
         //addTVMetaDataFromSxxExx(video, sxxExx);
         a.addMetadata(video);
-        log(INFO, "Title = "+ video.getTitle()+", Series = "+video.getSeries() +", SeasonEpisode = "+ video.getSeasonEpisodeNaming());
+        Logger.INFO( "Title = "+ video.getTitle()+", Series = "+video.getSeries() +", SeasonEpisode = "+ video.getSeasonEpisodeNaming());
 
     }
     private Thread t;
     private boolean STOP, CAN_STOP=false, IS_STOPPED = false;
-    BlockingQueue<XBMCFile> files;
+    BlockingQueue<MyLibraryFile> files;
     private Subfolder subf;
     public static List<Pattern> seasonEpisodePatterns = new ArrayList<Pattern>();
 
@@ -48,7 +51,7 @@ public class Archiver implements Runnable, Constants
     public static Map<File,String> allVideosSkippedBecauseAlreadyArchived = new LinkedHashMap<File,String>();
     public static Map<File,String> allFilesArchived = new HashMap<File,String>();
 
-    public static Map<File, XBMCFile> allVideosArchived = new LinkedHashMap<File, XBMCFile>();//must keep this linked
+    public static Map<File, MyLibraryFile> allVideosArchived = new LinkedHashMap<File, MyLibraryFile>();//must keep this linked
 
     //only track this subfolder (not-static)
     public Map<File,String> videosSkippedBecauseAlreadyArchived = new LinkedHashMap<File,String>();
@@ -71,7 +74,7 @@ public class Archiver implements Runnable, Constants
         t = new Thread(this);
     }
 
-    public void start(Subfolder subf, BlockingQueue<XBMCFile> files)
+    public void start(Subfolder subf, BlockingQueue<MyLibraryFile> files)
     {
         this.files = files;
         this.subf = subf;
@@ -91,21 +94,23 @@ public class Archiver implements Runnable, Constants
     {
         return IS_STOPPED;
     }
+    
+    @Override
     public void run() 
     {
         try
         {
-            setShortLogDesc("Archiving");
+            Config.setShortLogDesc("Archiving");
             while(!STOP)
             {
-                XBMCFile video = null;
+                MyLibraryFile video = null;
                 try
                 {
                      video = files.poll(1000, TimeUnit.MILLISECONDS);
                 }
                 catch(InterruptedException x)
                 {
-                    Config.log(ERROR, "Interrupted while archiving videos from queue. Cannot continue.",x);
+                    Logger.ERROR( "Interrupted while archiving videos from queue. Cannot continue.",x);
                     STOP = true;
                     break;
                 }
@@ -136,7 +141,7 @@ public class Archiver implements Runnable, Constants
         }
         catch(Exception x)
         {            
-            log(ERROR, "General error in archiving thread for subfolder named "+ subf.getFullName() +": "+ x,x);
+            Logger.ERROR( "General error in archiving thread for subfolder named "+ subf.getFullName() +": "+ x,x);
         }
         finally
         {
@@ -150,18 +155,18 @@ public class Archiver implements Runnable, Constants
             int updatedCount, int archiveSuccess, int archiveSkip, int archiveFail)
     {
         //try{subfName = subfName.substring(0, subfName.indexOf("/"));}catch(Exception ignored){}//try to trim to only the source name
-        setShortLogDesc("Summary:"+subfName);
-        log(NOTICE, "----------------------Archiving Summary for " + subfName+"----------------------");
-        log(NOTICE, "TV Success: "+ tvSuccess+", TV Fail: "+ tvFail);
-        log(NOTICE, "Movie Success: "+ movieSuccess+", Movie Fail: "+ movieFail);
-        log(NOTICE, "Music Video Success: "+ musicVideoSuccess+", Music Video Fail: "+ musicVideoFail);
+        Config.setShortLogDesc("Summary:"+subfName);
+        Logger.NOTICE( "----------------------Archiving Summary for " + subfName+"----------------------");
+        Logger.NOTICE( "TV Success: "+ tvSuccess+", TV Fail: "+ tvFail);
+        Logger.NOTICE( "Movie Success: "+ movieSuccess+", Movie Fail: "+ movieFail);
+        Logger.NOTICE( "Music Video Success: "+ musicVideoSuccess+", Music Video Fail: "+ musicVideoFail);
         
     	//AngryCamel - 20120817 1620 - Added generic
-        log(NOTICE, "Generic Success: "+ genericSuccess+", Generic Fail: "+ genericFail);
+        Logger.NOTICE( "Generic Success: "+ genericSuccess+", Generic Fail: "+ genericFail);
         
-        log(NOTICE, "New videos archived: "+ newArchivedCount +", existing videos updated: "+ updatedCount);
-        log(NOTICE, "Overall: Success: "+ archiveSuccess+", Skip: "+ archiveSkip +", Fail: "+ archiveFail);
-        setShortLogDesc("");
+        Logger.NOTICE( "New videos archived: "+ newArchivedCount +", existing videos updated: "+ updatedCount);
+        Logger.NOTICE( "Overall: Success: "+ archiveSuccess+", Skip: "+ archiveSkip +", Fail: "+ archiveFail);
+        Config.setShortLogDesc("");
 
         //track global counts
         if(!subfName.equals(GLOBAL_SUMMARY_NAME))//dont add global to global
@@ -192,7 +197,7 @@ public class Archiver implements Runnable, Constants
         		globalgenericSuccess, globalgenericFail, globalnewArchivedCount, globalupdatedCount, globalarchiveSuccess, globalarchiveSkip, globalarchiveFail);
     }
 
-    public void archiveVideo(XBMCFile video)
+    public void archiveVideo(MyLibraryFile video)
     {
                         
         //if its not a duplicate video,check if we can add more (if it can be a dup, need to continue and determine if it is a dup)
@@ -204,7 +209,7 @@ public class Archiver implements Runnable, Constants
                 return;
             }
         }
-        log(DEBUG,"Next: "+video.getFullPathEscaped());
+        Logger.DEBUG("Next: "+video.getFullPathEscaped());
         
         video.setType(subf.getType());        
         addMetadata(video);
@@ -218,7 +223,7 @@ public class Archiver implements Runnable, Constants
                 return;
             }
         }
-        //log(INFO, video.getFullPathEscaped()+" Duplicate ? "+ video.isDuplicate());
+        //Logger.INFO( video.getFullPathEscaped()+" Duplicate ? "+ video.isDuplicate());
 
         //if it doesnt have valid meta data yet, try TVDB lookup / manual archiving
         if(!video.hasValidMetaData())
@@ -230,7 +235,7 @@ public class Archiver implements Runnable, Constants
                     if(!video.hasBeenLookedUpOnTVDB())
                     {
                         
-                        log(INFO, "Since this video has a valid series and title, will attempt to lookup Seasion/Episode numbers on TheTVDB.com.");
+                        Logger.INFO( "Since this video has a valid series and title, will attempt to lookup Seasion/Episode numbers on TheTVDB.com.");
                         TVDB.lookupTVShow(video);
                     }
 
@@ -238,13 +243,13 @@ public class Archiver implements Runnable, Constants
                     {
                         if(Config.MANUAL_ARCHIVING_ENABLED)
                         {
-                            log(INFO, "Archiving as a special (Season zero) episode since TVDB lookup failed....");
+                            Logger.INFO( "Archiving as a special (Season zero) episode since TVDB lookup failed....");
                             //save as a special
                             video.setSeasonNumber(0);
                             video.setEpisodeNumber(getNextSpecialEpisiodeNumber(video));
                         }
                         else
-                            log(INFO,"TV Episode will fail to be archived because manual archiving is disabled and the meta-data cannot be parsed or found on the TheTVDB.com: "+ video.getFullPathEscaped());
+                            Logger.INFO("TV Episode will fail to be archived because manual archiving is disabled and the meta-data cannot be parsed or found on the TheTVDB.com: "+ video.getFullPathEscaped());
                     }
 
                 }
@@ -281,9 +286,9 @@ public class Archiver implements Runnable, Constants
                     if(!video.isDuplicate())//only log the original skip
                     {
                         archiveSkip++;
-                        setShortLogDesc("Arvhive:Skip");
-                        log(DEBUG, "SKIP: Not archiving this video because it has already been archived by another source");
-                        setShortLogDesc("Archiving");
+                        Config.setShortLogDesc("Arvhive:Skip");
+                        Logger.DEBUG( "SKIP: Not archiving this video because it has already been archived by another source");
+                        Config.setShortLogDesc("Archiving");
                     }
                 }                                
             }
@@ -292,27 +297,27 @@ public class Archiver implements Runnable, Constants
                 if(!video.isDuplicate())
                 {
                     archiveSkip++;
-                    setShortLogDesc("Arvhive:Skip");
-                    log(INFO, "SKIP: Not archiving because max limit has been reached: "
+                    Config.setShortLogDesc("Arvhive:Skip");
+                    Logger.INFO( "SKIP: Not archiving because max limit has been reached: "
                         + (video.isTvShow() ? "max series="+(subf.getMaxSeries()<0 ? "unlimited":subf.getMaxSeries())+", series archived="+subf.getNumberOfSeries() +", ":"")
                         +"max_videos="+(subf.getMaxVideos()<0 ? "unlimited":subf.getMaxVideos())+", videos_archived="+subf.getNumberOfVideos());
-                    setShortLogDesc("Archiving");
+                    Config.setShortLogDesc("Archiving");
                 }
             }
         }
         else//file does not have valid meta data
         {
             archiveFail++;
-            log(WARNING, "Cannot be archived: series="+video.getSeries()+", title="+video.getTitle()+", season="+video.getSeasonNumber()+", episode="+video.getEpisodeNumber()
+            Logger.WARN( "Cannot be archived: series="+video.getSeries()+", title="+video.getTitle()+", season="+video.getSeasonNumber()+", episode="+video.getEpisodeNumber()
                     +LINE_BRK + video.getFullPathEscaped());
         }
 
         if(!subf.canContainMultiPartVideos() && !subf.canAddAnotherVideo())
-            log(NOTICE,"The rest of the videos in this subfolder will be skipped because max video count of "+ subf.getMaxVideos() +" has been reached.");
+            Logger.NOTICE("The rest of the videos in this subfolder will be skipped because max video count of "+ subf.getMaxVideos() +" has been reached.");
 
     }
 
-    private void increaseArchiveCount(XBMCFile video, boolean success)
+    private void increaseArchiveCount(MyLibraryFile video, boolean success)
     {        
         //overall count
         if(success)archiveSuccess++; else archiveFail++;
@@ -331,7 +336,7 @@ public class Archiver implements Runnable, Constants
         }
     }
 
-    public void addMetadata(XBMCFile video)
+    public void addMetadata(MyLibraryFile video)
     {
         /*
         if("manualarchive".equalsIgnoreCase(source.getName()))
@@ -345,7 +350,7 @@ public class Archiver implements Runnable, Constants
                 String SxxExx = findSeasonEpisodeNumbers(video);
                 if(!tools.valid(SxxExx))
                 {
-                    Config.log(WARNING, "Cannot get meta data because the TV Show does not have a valid SxxExx in its name: "+ fileName);
+                    Logger.WARN( "Cannot get meta data because the TV Show does not have a valid SxxExx in its name: "+ fileName);
                     return;
                 }
                 int sIndx = SxxExx.toLowerCase().indexOf("s");
@@ -370,16 +375,16 @@ public class Archiver implements Runnable, Constants
         
         //handle the custom parsing        
         boolean checkForCustomLookups = !"manualarchive".equalsIgnoreCase(source.getName());
-        //log(INFO,"checkForCustomLookups = "+checkForCustomLookups +", source.getName() = "+source.getName()+", parser = "+ subf.getSource().getCustomParser());
+        //Logger.INFO("checkForCustomLookups = "+checkForCustomLookups +", source.getName() = "+source.getName()+", parser = "+ subf.getSource().getCustomParser());
         if(checkForCustomLookups)
         {
-            //log(INFO, "Is PlayOn = " + "playon".equalsIgnoreCase(subf.getSource().getCustomParser()));
+            //Logger.INFO( "Is PlayOn = " + "playon".equalsIgnoreCase(subf.getSource().getCustomParser()));
             if("playon".equalsIgnoreCase(subf.getSource().getCustomParser()))
             {
-                boolean isNetflix = (fullPath.toLowerCase().contains("netflix/"));
-                boolean isHulu = (fullPath.toLowerCase().contains("hulu/"));
-                boolean isCBS = (fullPath.toLowerCase().contains("cbs/"));
-                boolean isComedyCentral = (fullPath.toLowerCase().contains("comedy central/"));
+                boolean isNetflix = (fullPath.toLowerCase().contains("netflix/") || source.getName().toLowerCase().contains("netflix"));
+                boolean isHulu = (fullPath.toLowerCase().contains("hulu/") || source.getName().toLowerCase().contains("hulu"));
+                boolean isCBS = (fullPath.toLowerCase().contains("cbs/") || source.getName().toLowerCase().contains("cbs"));
+                boolean isComedyCentral = (fullPath.toLowerCase().contains("comedy central/") || source.getName().toLowerCase().contains("comedycentral"));
 
                 boolean customLookupSuccess = false;
                 if(isNetflix)
@@ -396,20 +401,15 @@ public class Archiver implements Runnable, Constants
                 }
                 else
                 {
-                    log(DEBUG, "No custom PlayOn parsing is availble for this video, trying default parsing for: "+video.getFullPathEscaped());
+                    Logger.DEBUG( "No custom PlayOn parsing is availble for this video, trying default parsing for: "+video.getFullPathEscaped());
                 }
                 
                 if(!customLookupSuccess)
                 {
-                    log(INFO, "Custom PlayOn parsing was unsuccessful, attempting default parsing for this video: "+ video.getFullPathEscaped());
+                    Logger.INFO( "Custom PlayOn parsing was unsuccessful, attempting default parsing for this video: "+ video.getFullPathEscaped());
                     defaultParse(video);
                 }
-            }//end playon customs
-            else if(subf.getSource().getPath().toLowerCase().startsWith("plugin://plugin.video.icefilms") || "icefilms".equalsIgnoreCase(subf.getSource().getCustomParser()))
-            {
-                //ice films custom parsing
-                IceFilmsArchiver.Archive(video);
-            }
+            }//end playon customs           
             else //default handling of file, not a known type
             {
                 defaultParse(video);
@@ -423,13 +423,13 @@ public class Archiver implements Runnable, Constants
         //check for force_tvdb="true"
         if(video.isTvShow() && !video.hasBeenLookedUpOnTVDB() && video.getSubfolder().forceTVDBLookup())
         {
-            log(INFO, "This video is set to forced to be looked up on TVDB.com. Looking up now....");
-            log(INFO, "TVDB lookup success = " + TVDB.lookupTVShow(video));
+            Logger.INFO( "This video is set to forced to be looked up on TVDB.com. Looking up now....");
+            Logger.INFO( "TVDB lookup success = " + TVDB.lookupTVShow(video));
         }
     }
 
 
-    private void defaultParse(XBMCFile video)
+    private void defaultParse(MyLibraryFile video)
     {
         if(video.isMusicVideo())
         {
@@ -439,7 +439,7 @@ public class Archiver implements Runnable, Constants
                 String label = video.getFileLabel();
                 if(valid(label))
                 {                    
-                    Config.log(DEBUG, "Getting music video title from: "+ label);
+                    Logger.DEBUG( "Getting music video title from: "+ label);
                     final String splitter = " - ";
                     int splitIndex = label.indexOf(splitter);
                     if(splitIndex != -1)
@@ -451,7 +451,7 @@ public class Archiver implements Runnable, Constants
                         artist = MusicVideoScraper.cleanMusicVideoLabel(artist);
                         title = MusicVideoScraper.cleanMusicVideoLabel(title);
                         
-                        Config.log(DEBUG, "Artist="+artist+". Title="+title);
+                        Logger.DEBUG( "Artist="+artist+". Title="+title);
                         video.setArtist(artist);
                         video.setTitle(title);                        
                     }
@@ -461,40 +461,40 @@ public class Archiver implements Runnable, Constants
             }
             catch(Exception x)
             {
-                log(WARNING, "Cannot get Artist/Title from music video: \""+video.getFileLabel()+"\" ("+video.getFullPathEscaped()+"): "+ x.getMessage());
+                Logger.WARN( "Cannot get Artist/Title from music video: \""+video.getFileLabel()+"\" ("+video.getFullPathEscaped()+"): "+ x.getMessage());
                 musicVideoFail++;
             }
         }
         else if(video.isTvShow())
         {
-            log(DEBUG, "Attempting default parsing of TV Show...");
+            Logger.DEBUG( "Attempting default parsing of TV Show...");
             if(addTVMetaData(video))
-                log(DEBUG,"Successfully got TV informationg using default method. This show will be able to be archived if max limits have not been exceeded.");
+                Logger.DEBUG("Successfully got TV informationg using default method. This show will be able to be archived if max limits have not been exceeded.");
         }
         else if(video.isMovie())
         {
-            log(DEBUG, "Attempting to parse movie title using default settings. Setting movie title to \""+video.getFileLabel()+"\"");
+            Logger.DEBUG( "Attempting to parse movie title using default settings. Setting movie title to \""+video.getFileLabel()+"\"");
             video.setTitle(video.getFileLabel());
         }
     	//AngryCamel - 20120817 1620 - Added generic
         else if(video.isGeneric())
         {
-            log(DEBUG, "Attempting to parse generic video using default settings. Setting video title to \""+video.getFileLabel()+"\"");
+            Logger.DEBUG( "Attempting to parse generic video using default settings. Setting video title to \""+video.getFileLabel()+"\"");
             video.setTitle(video.getFileLabel());
         	//AngryCamel - 20120817 1620 - Added generic
         	applyCustomParser(video);
         }
         else//not yet supported
         {
-            setShortLogDesc("Archive:Skip");
+            Config.setShortLogDesc("Archive:Skip");
             archiveSkip++;
-            log(INFO, "SKIPPING: This video source type was not specified (type=\""+video.getType()+"\") or is not yet supported: "+ video.getFullPathEscaped());
-            setShortLogDesc("Archiving");
+            Logger.INFO( "SKIPPING: This video source type was not specified (type=\""+video.getType()+"\") or is not yet supported: "+ video.getFullPathEscaped());
+            Config.setShortLogDesc("Archiving");
             return;
         }
     }
 
-    public boolean archiveFileInDropbox(XBMCFile video)
+    public boolean archiveFileInDropbox(MyLibraryFile video)
     {
         final String destNoExt = getDroboxDestNoExt(video);
         final String extToSave = ".strm";
@@ -506,8 +506,8 @@ public class Archiver implements Runnable, Constants
         
         boolean duplicateUpdate = video.isDuplicate() && updating;//for duplicates, allow updating the current file because this dup may will add another multi-part to the file
         boolean regularUpdate = !video.isDuplicate();
-        boolean created;
-        if(regularUpdate || duplicateUpdate) created = tools.createStrmFile(whereFile, video.getFileList());//getFileList() will return multiple files for multi-part videos
+        StrmUpdateResult result;
+        if(regularUpdate || duplicateUpdate) result = tools.createStrmFile(whereFile, updating, video.getFileList());//getFileList() will return multiple files for multi-part videos
         else
         {
             //we arecreating a new file from a duplicate. don't allow this, this means we have reached the max file limit, but this file was allowd to be processed because its a dup
@@ -518,15 +518,20 @@ public class Archiver implements Runnable, Constants
             return true;//don't need to update the rest of the meta-data (it was done when the original was archived)
         }
         
-        if(created)
+        //if successful, queue changes
+        if(result == StrmUpdateResult.CHANGED || result == StrmUpdateResult.SKIPPED_NO_CHANGE)
         {
             allVideosArchived.put(whereFile, video);
 
-            //queue the meta-data changes (append/prepend/movie set)
+            //queue the meta-data changes (append/prepend/movie set/movie tags)
             //if the change already exists in the queue, it wil be skipped.
             //if the value has changed (and it's still in the queue), it will be updated
+            
             //movie set
             queueMetaDataChange(video, Constants.MOVIE_SET, video.getSubfolder().getMovieSet());
+            
+            //movie tags
+            queueMetaDataChange(video, Constants.MOVIE_TAGS, video.getSubfolder().getMovieTagsAsString());
 
             //prefix
             queueMetaDataChange(video, Constants.PREFIX, video.getSubfolder().getPrefix());
@@ -537,16 +542,17 @@ public class Archiver implements Runnable, Constants
             if(updating)
             {
                 updatedCount++;
-                setShortLogDesc("Archive:Update");
+                String type = (result == StrmUpdateResult.CHANGED ? "Update" : "NoChange");
+                Config.setShortLogDesc("Archive:"+type);
             }
-            else
+            else//new file
             {
                 newArchivedCount++;
-                setShortLogDesc("Archive:New");
+                Config.setShortLogDesc("Archive:New");
             }
             
-            log(INFO, (!updating ?"Archived" : "Updated") +" video at: "+ whereFile +" ("+video.getFullPathEscaped()+")");
-            setShortLogDesc("Arvhiving");
+            Logger.INFO( whereFile +" ("+video.getFullPathEscaped()+")");
+            Config.setShortLogDesc("Arvhiving");
             trackArchivedFiles(whereFile.getPath(), video);
 
             //check for scraping/nfo generation
@@ -555,12 +561,12 @@ public class Archiver implements Runnable, Constants
                 MusicVideoScraper.scrape(whereFile);
             }
         }
-        else log(WARNING, "Failed to "+(updating ?"Archive" : "Update")+" video at:" + whereFile+ "("+video.getFullPathEscaped()+")");
+        else Logger.WARN( "Failed to "+(updating ?"Archive" : "Update")+" video at:" + whereFile+ "("+video.getFullPathEscaped()+")");
 
-        return created;
+        return result != StrmUpdateResult.ERROR;
     }
 
-    private void trackArchivedFiles(String fullFinalPath, XBMCFile video)
+    private void trackArchivedFiles(String fullFinalPath, MyLibraryFile video)
     {
         
         //updates/adds the entry for the file at fullFinalPath
@@ -572,12 +578,12 @@ public class Archiver implements Runnable, Constants
         filesArchived.put(new File(fullFinalPath), originalPath);//track this subfolder
     }
 
-    public static String getDroboxDestNoExt(XBMCFile file)
+    public static String getDroboxDestNoExt(MyLibraryFile file)
     {
         return getDropboxDestNoExt(Config.DROPBOX, file);//default dropbox
     }
     
-    public static String getDropboxDestNoExt(String dropbox, XBMCFile file)
+    public static String getDropboxDestNoExt(String dropbox, MyLibraryFile file)
     {
         //determine new location, make sure directory structure is there
 
@@ -587,21 +593,21 @@ public class Archiver implements Runnable, Constants
             File tvShowDir = new File(dropbox+SEP+"TV Shows");
             if(!tvShowDir.isDirectory())
             {
-                log(INFO, "Creating base TV Shows directory at: " + tvShowDir);
+                Logger.INFO( "Creating base TV Shows directory at: " + tvShowDir);
                 tvShowDir.mkdir();
             }
 
             File seriesDir = new File(tvShowDir+SEP+tools.spacesToDots(tools.safeFileName(file.getSeries())));//safe name replaces spaces with periods
             if(!seriesDir.isDirectory())
             {
-                log(DEBUG, "Creating series directory at " + seriesDir);
+                Logger.DEBUG( "Creating series directory at " + seriesDir);
                 seriesDir.mkdir();
             }
 
             File seasonDir = new File(seriesDir +SEP+ "Season." + file.getSeasonNumber());
             if(!seasonDir.isDirectory())
             {
-                log(DEBUG, "Creating season directory at " + seasonDir);
+                Logger.DEBUG( "Creating season directory at " + seasonDir);
                 seasonDir.mkdir();
             }
 
@@ -616,7 +622,7 @@ public class Archiver implements Runnable, Constants
              File movieDir = new File(dropbox + SEP+"Movies");
             if(!movieDir.isDirectory())
             {
-                log(INFO, "Creating base Movies directory at: " + movieDir);
+                Logger.INFO( "Creating base Movies directory at: " + movieDir);
                 movieDir.mkdir();
             }
              String yearStr = (file.hasYear() ? " ("+file.getYear()+")" : "");
@@ -627,7 +633,7 @@ public class Archiver implements Runnable, Constants
                  movieDir = new File(dropbox + SEP+"Movies"+SEP+ tools.safeFileName(file.getTitle() + yearStr));
                  if(!movieDir.isDirectory())
                 {
-                    log(INFO, "Creating \""+file.getTitle()+"\" Movie directory at: " + movieDir);
+                    Logger.INFO( "Creating \""+file.getTitle()+"\" Movie directory at: " + movieDir);
                     movieDir.mkdir();
                 }
             }
@@ -640,7 +646,7 @@ public class Archiver implements Runnable, Constants
             File musicVideoDir = new File(dropbox +SEP+"Music Videos");
             if(!musicVideoDir.isDirectory())
             {
-                log(INFO, "Creating base Music Videos directory at: " + musicVideoDir);
+                Logger.INFO( "Creating base Music Videos directory at: " + musicVideoDir);
                 musicVideoDir.mkdir();
             }
             return musicVideoDir+SEP+ tools.safeFileName(file.getArtist() + " - "+ file.getTitle());
@@ -652,14 +658,14 @@ public class Archiver implements Runnable, Constants
             File genericDir = new File(dropbox+SEP+"Generic");
             if(!genericDir.isDirectory())
             {
-                log(INFO, "Creating base Generic directory at: " + genericDir);
+                Logger.INFO( "Creating base Generic directory at: " + genericDir);
                 genericDir.mkdir();
             }
 
             File seriesDir = new File(genericDir+SEP+tools.spacesToDots(tools.safeFileName(file.getSeries())));//safe name replaces spaces with periods
             if(!seriesDir.isDirectory())
             {
-                log(DEBUG, "Creating series directory at " + seriesDir);
+                Logger.DEBUG( "Creating series directory at " + seriesDir);
                 seriesDir.mkdir();
             }
 
@@ -671,33 +677,25 @@ public class Archiver implements Runnable, Constants
         }
         else
         {
-             log(ERROR, "Unknown video type: \""+ file.getType()+"\"");
+             Logger.ERROR( "Unknown video type: \""+ file.getType()+"\"");
              return null;
         }
     }
    
-    public void queueMetaDataChange(XBMCFile file, String typeOfMetaData, String value)
+    public void queueMetaDataChange(MyLibraryFile file, String typeOfMetaData, String value)
     {
-        if(!file.isMovie() && typeOfMetaData.equals(MOVIE_SET))
+        if(!file.isMovie() && (typeOfMetaData.equals(MOVIE_SET) || typeOfMetaData.equals(MOVIE_TAGS)))
         {
-            log(DEBUG, "Movie Set not allowed for " + typeOfMetaData+", Skipping.");
+            //Logger.DEBUG( "Movie Set/Tags not allowed for non-movie. Skipping: "+file.getFileLabel());
             return;
         }
-        /* Allowing prefix and suffix for movies because movies do not always show up in sets depending on how you look for them in the library
-         * the prefix/suffix gives users an alternate way to tag movies archived by this tool
-        if(file.isMovie() && (typeOfMetaData.equals(PREFIX) || typeOfMetaData.equals(SUFFIX) ))
-        {
-            log(DEBUG, "Prefix/Suffix not allowed for movie type (Only Movie Set is allowed). Skipping.");
-                return;
-        }         
-         */
-                
+                       
         String dropboxFileLocation = file.getFinalLocation();
         boolean success = tools.addMetaDataChangeToDatabase(file, typeOfMetaData, value);
         if(!success)
-            log(WARNING, "Could not queue meta-data change: type="+typeOfMetaData+", value="+value+", for file: "+dropboxFileLocation);
+            Logger.WARN( "Could not queue meta-data change: type="+typeOfMetaData+", value="+value+", for file: "+dropboxFileLocation);
         else
-            log(DEBUG, "Successfuly queued meta-data change for type="+typeOfMetaData+", value="+value+", for file: "+dropboxFileLocation);
+            Logger.DEBUG( "Successfuly queued meta-data change for type="+typeOfMetaData+", value="+value+", for file: "+dropboxFileLocation);
     }
   
     
@@ -705,7 +703,7 @@ public class Archiver implements Runnable, Constants
     /*
      * Checks if the file has been already archived by ANY Archiver (not just the current one).
      */
-    public boolean isAlreadyArchived(XBMCFile file)
+    public boolean isAlreadyArchived(MyLibraryFile file)
     {                
         //check if this final path for this video has already been archived in this run
         String destNoExt = getDroboxDestNoExt(file);
@@ -717,8 +715,9 @@ public class Archiver implements Runnable, Constants
             //these videos must be tracked so we know not to delete them when cleaning dropbox
             allVideosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track globally
             videosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track fr this subfolder
-            setShortLogDesc("Archive:Duplicate");
-            log(INFO, "This video ("+file.getFullPathEscaped()+") was already archived at \""+dropboxLocation+"\" by video from ("+Config.escapePath(videoThatWasAlreadyArchivedAtThisLocation)+")");
+            Config.setShortLogDesc("Archive:Duplicate");
+            Logger.INFO( "This video ("+file.getFullPathEscaped()+") was already archived at \""+dropboxLocation+"\" "
+                    + "by video from ("+Config.escapePath(videoThatWasAlreadyArchivedAtThisLocation)+")");
             return true;
         }                         
 
@@ -735,7 +734,7 @@ public class Archiver implements Runnable, Constants
                 if(seasonDir.isDirectory())
                 {
                     episodes = FileUtils.listFiles(seasonDir, new String[] {"strm"}, false);
-                    log(DEBUG, "Found "+ episodes.size() +" existing .strm TV Episodes in: "+seasonDir);
+                    Logger.DEBUG( "Found "+ episodes.size() +" existing .strm TV Episodes in: "+seasonDir);
                     episodesBySeasonDir.put(seasonDir, episodes);
                 }
                 else return false;//not a duplicate; its directory doesn't even exist yet
@@ -745,35 +744,32 @@ public class Archiver implements Runnable, Constants
             String SxxExx = file.getSeasonEpisodeNaming();            
             try
             {                
-                log(DEBUG, "SxxExx DuplicateCheck for "+ episodes.size() +" .strm files in TV Shows directory for match on "+ SxxExx);
+                Logger.DEBUG( "SxxExx DuplicateCheck for "+ episodes.size() +" .strm files in TV Shows directory for match on "+ SxxExx);
                 for(File existingEpisode : episodes)
                 {
                     boolean match = existingEpisode.getName().toUpperCase().contains(SxxExx.toUpperCase());
                     
                     if(match)
                     {
-                        log(DEBUG, "SxxExx match found: \"" +existingEpisode.getName() + "\" contains \""+ SxxExx.toUpperCase()+"\"");
-                        boolean updating = (existingEpisode.equals(new File(destNoExt+".strm")));
-                        if(!updating)//this means that the same season/episode exists, under a different file name. We don't need to add another one as it would be a duplicate
-                        {
-                            setShortLogDesc("SxEx Duplicate");                            
-                            log(INFO,"This TV Show is already archived (based on Season/Episode numbers) at: \""+existingEpisode+"\", will not archive again: "+file.getFullPathEscaped());
-                            allVideosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track globally
-                            videosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track fr this subfolder
-                            return true;
-                        }
-                        else {//we are updating (exact same file name). This is not a sXXeXX duplicate
-                            //we shoudn't get here because exact file name dup's should have been caught in previous check
-                            log(DEBUG, "Found SxxExx duplicate with exact file name match, did not expect this to happen.");
-                            return false;
-                        }
+                        Logger.DEBUG( "SxxExx match found: \"" +existingEpisode.getName() + "\" contains \""+ SxxExx.toUpperCase()+"\"");
+                        boolean sameFile = (existingEpisode.equals(dropboxLocation));
+                        
+                        if(sameFile)//this is the actual file we are checking... skip it
+                            continue;
+                        
+                        //if got here, the same season/episode exists, under a different file name. We don't need to add another one as it would be a duplicate                        
+                        Config.setShortLogDesc("SxEx Duplicate");                            
+                        Logger.INFO("This TV Show is already archived (based on Season/Episode numbers) at: \""+existingEpisode+"\", will not archive again: "+file.getFullPathEscaped());
+                        allVideosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track globally
+                        videosSkippedBecauseAlreadyArchived.put(dropboxLocation, file.getFullPathEscaped());//track fr this subfolder
+                        return true;                                                
                     }
                 }
-                return false;
+                return false;//no dup
             }
             catch(Exception x)
             {
-                log(WARNING, "Cannot determine if this TV Show is alrady archived: "+ file.getFullPathEscaped(),x);
+                Logger.WARN( "Cannot determine if this TV Show is alrady archived: "+ file.getFullPathEscaped(),x);
                 return false;//assume its not alrady archived
             }
         }
@@ -784,12 +780,12 @@ public class Archiver implements Runnable, Constants
         }
         else
         {
-            log(WARNING, "Unknown file type being checked for isFileAlreadyArchived(), defaulting to false");
+            Logger.WARN( "Unknown file type being checked for isFileAlreadyArchived(), defaulting to false");
             return false;
         }         
     }
 
-    public static String findSeasonEpisodeNumbers(XBMCFile video)
+    public static String findSeasonEpisodeNumbers(MyLibraryFile video)
     {
         
         for(Pattern p : seasonEpisodePatterns)
@@ -826,7 +822,7 @@ public class Archiver implements Runnable, Constants
                         match = "s"+match.toLowerCase().replace("x", "e");
                         break;
                     default: //missed the pattern
-                        Config.log(WARNING, "Uncaught matching pattern, this must be handled. Expect errors.");
+                        Logger.WARN( "Uncaught matching pattern, this must be handled. Expect errors.");
                 }
                 return match;
             }
@@ -835,12 +831,12 @@ public class Archiver implements Runnable, Constants
         return null;
     }
     
-     public boolean addTVMetaData(XBMCFile video)
+     public boolean addTVMetaData(MyLibraryFile video)
     {
         String sxxExx = findSeasonEpisodeNumbers(video);
         if(tools.valid(sxxExx))
         {
-            log(DEBUG, "Found SxxExx pattern ("+sxxExx+"), attempting to parse it.");
+            Logger.DEBUG( "Found SxxExx pattern ("+sxxExx+"), attempting to parse it.");
             return addTVMetaDataFromSxxExx(video, sxxExx);//dont need to send in sxxexx string because they have been set in the findSeasonEpisodeNumbers method
         }
         else//try secondary method, lookingup on TheTVDB.com
@@ -848,29 +844,29 @@ public class Archiver implements Runnable, Constants
         	//AngryCamel - 20120817 1620 - Added generic
         	if(applyCustomParser(video))
         	{
-        	    log(DEBUG, "Found series \""+video.getSeries() +"\", and title \""+video.getTitle()+"\", from file label \""+video.getFileLabel()+"\" using a custom parser. "
+        	    Logger.DEBUG( "Found series \""+video.getSeries() +"\", and title \""+video.getTitle()+"\", from file label \""+video.getFileLabel()+"\" using a custom parser. "
         	    	            + "Will use this info to look up on the TVDB.com");
         	    return TVDB.lookupTVShow(video);
         	}
         	
         	if(getSeriesAndTitleFromFileLabel(video)) //check if the series and title are both in the file label
             {
-                log(DEBUG, "Found series \""+video.getSeries() +"\", and title \""+video.getTitle()+"\", from file label \""+video.getFileLabel()+"\". "
+                Logger.DEBUG( "Found series \""+video.getSeries() +"\", and title \""+video.getTitle()+"\", from file label \""+video.getFileLabel()+"\". "
                         + "Will use this info to look up on the TVDB.com");
                 return TVDB.lookupTVShow(video);
             }
             else //assume that the file label is the episode title
             {
                 video.setTitle(video.getFileLabel());
-                log(DEBUG, "Assuming that the file label is the episode title: \""+video.getTitle()+"\", finding Series by looking at parent folder(s)");
+                Logger.DEBUG( "Assuming that the file label is the episode title: \""+video.getTitle()+"\", finding Series by looking at parent folder(s)");
                 if(getSeriesFromParentFolder(video))
                 {
-                    log(DEBUG, "Series determined to be \""+video.getSeries()+"\". Will now lookup on TheTVDB to get SxxExx numbers...");
+                    Logger.DEBUG( "Series determined to be \""+video.getSeries()+"\". Will now lookup on TheTVDB to get SxxExx numbers...");
                     return TVDB.lookupTVShow(video);
                 }
                 else
                 {
-                    log(WARNING, "Could not get series from parent folder(s). Will not be able to archive this video because series name is required: "+ video.getFullPathEscaped());
+                    Logger.WARN( "Could not get series from parent folder(s). Will not be able to archive this video because series name is required: "+ video.getFullPathEscaped());
                     return false;
                 }
             }
@@ -886,12 +882,12 @@ public class Archiver implements Runnable, Constants
 	//     <parser>
 	//         <regexp>([\w\s*'-]*):([\w\s*'-]*)</regexp> <!-- ex: "Show Name: Title of the Episode" -->
 	//     </parser>
-	 public boolean applyCustomParser(XBMCFile video)
+	 public boolean applyCustomParser(MyLibraryFile video)
 	 {
 
      	if(video.getSubfolder().shouldApplyParser())
      	{
-             log(DEBUG, "Found custom series and title parser.");
+             Logger.DEBUG( "Found custom series and title parser.");
      		//Info: Structure of parsers = {"regexp":["pattern1","pattern2"]}
              for(Map.Entry<String,List<String>> entry : video.getSubfolder().parsers.entrySet())
              {
@@ -902,7 +898,7 @@ public class Archiver implements Runnable, Constants
                  {
                      if(type.equalsIgnoreCase(Constants.REGEXP))
                      {
-                         log(DEBUG, "Custom series and title parser regex: "+parserString);
+                         Logger.DEBUG( "Custom series and title parser regex: "+parserString);
                          Pattern p = Pattern.compile(parserString, Pattern.CASE_INSENSITIVE);
                          Matcher m = p.matcher(video.getFileLabel());
                          if(m.find())
@@ -923,12 +919,12 @@ public class Archiver implements Runnable, Constants
      	return false;
     }
 
-    public static boolean addTVMetaDataFromSxxExx(XBMCFile video, String seasonEpisodeNaming)
+    public static boolean addTVMetaDataFromSxxExx(MyLibraryFile video, String seasonEpisodeNaming)
     {
         //parse season/episode numbers        
         if(!valid(seasonEpisodeNaming)) 
         {
-            Config.log(WARNING, "No Season/Episode pattern was found. Cannot continue for: "+video.getFullPathEscaped());
+            Logger.WARN( "No Season/Episode pattern was found. Cannot continue for: "+video.getFullPathEscaped());
             return false;//no season episode string, or video does not have season/episode nubmers set
         }
         
@@ -944,7 +940,7 @@ public class Archiver implements Runnable, Constants
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "Cannot parse season and episode numbers from: "+ seasonEpisodeNaming +" ("+SxxExx+"): "+ x);
+            Logger.WARN( "Cannot parse season and episode numbers from: "+ seasonEpisodeNaming +" ("+SxxExx+"): "+ x);
             return false;
         }
 
@@ -969,7 +965,7 @@ public class Archiver implements Runnable, Constants
             }
             if(!valid(video.getTitle()))
             {
-                log(WARNING, "Title cannot be found, it was expected to be found after one of "+ Arrays.toString(titleSplitters)+ " in the file label \""+video.getFileLabel()+"\"");
+                Logger.WARN( "Title cannot be found, it was expected to be found after one of "+ Arrays.toString(titleSplitters)+ " in the file label \""+video.getFileLabel()+"\"");
                 return false;
             }
             
@@ -987,7 +983,7 @@ public class Archiver implements Runnable, Constants
                 {
                     
                     String[] parts = video.getFileLabel().split(splitter);
-                    log(DEBUG, "Splitting \""+video.getFileLabel()+"\" with \""+splitter+"\" = "+ Arrays.toString(parts)+", length of "+ parts.length +", looking for "+ 3);
+                    Logger.DEBUG( "Splitting \""+video.getFileLabel()+"\" with \""+splitter+"\" = "+ Arrays.toString(parts)+", length of "+ parts.length +", looking for "+ 3);
                     if(parts.length == 3)
                     {
                         String series = parts[0];
@@ -1015,7 +1011,7 @@ public class Archiver implements Runnable, Constants
     /*
      * Get the series and title from labels like "Chuck - Pilot" or "Desperate Housewives: Pilot"
      */
-    public boolean getSeriesAndTitleFromFileLabel(XBMCFile video)
+    public boolean getSeriesAndTitleFromFileLabel(MyLibraryFile video)
     {
         String[] splitters = new String[] {" - ", ": "};
         for(String splitter : splitters)
@@ -1031,24 +1027,26 @@ public class Archiver implements Runnable, Constants
                 }
                 catch(Exception x)
                 {
-                    log(INFO, "Could not get series/title from \""+ video.getFileLabel() +"\", splitting at \""+ splitter+"\": "+ x.getMessage());
+                    Logger.INFO( "Could not get series/title from \""+ video.getFileLabel() +"\", splitting at \""+ splitter+"\": "+ x.getMessage());
                 }
             }
         }
         return false;
     }
 
-    public static boolean getSeriesFromParentFolder(XBMCFile video)
+    public static boolean getSeriesFromParentFolder(MyLibraryFile video)
     {
         //the series title comess before this as a folder name
-        List<String> skipFolders = new ArrayList<String>();
+        List<String> skipFolders = new ArrayList<String>();//the must match the folder name COMPLETELY. Partial matches wont be skipped
         
         final String optionalYear ="(\\([0-9]+\\)|\\[[0-9]+\\])?";//matches (nnnn) or [nnnn]
         skipFolders.add("(Full Episodes|Episodes|Clips|Seasons)");//literal skips
-        skipFolders.add("((Season|Series|Set|Episodes|Collection) (\\([0-9]+\\)|[0-9]+))"+" ?"+optionalYear);//name + number + optional_space + optional_year
+        skipFolders.add("((Season|Series|Set|Episodes|Collection) (\\([0-9]+\\)|[0-9]+))"+" ?"+optionalYear);//name + number + optional_space + optional_year        
+        skipFolders.add("S[0-9]+E[0-9]+ - .+");//to skip "S04E01 - Orientation" in this: Netflix/Instant Queue/H/Heroes/Heroes: Season 4/S04E01 - Orientation/S04E11 - Thanksgiving
+        skipFolders.add(".+: Season [0-9]+");//to skip "Heroes: Season 4" this: Netflix/Instant Queue/H/Heroes/Heroes: Season 4/S04E01 - Orientation/S04E11 - Thanksgiving
         skipFolders.add("[0-9]+");//new format used by playon specified season number as single integer folder
-        
-        String series = getParentFolderWithSkips(video.getFullPath().split(DELIM),skipFolders);
+        skipFolders.add("(Next|Previous) (Page|Section) \\(.+\\)");//HuluBlueCop/Subscriptions/The Office (HD)/Episodes (174)/Next Page (101-174 of 174)/6x12 - Secret Santa (HD)
+        String series = getParentFolderWithSkips(video.getFullPath().split(xbmc.util.Constants.DELIM),skipFolders);
         if(tools.valid(series))
         {
             video.setSeries(series);
@@ -1087,7 +1085,7 @@ public class Archiver implements Runnable, Constants
         return null;
     }
 
-    public int getNextSpecialEpisiodeNumber(XBMCFile file)
+    public int getNextSpecialEpisiodeNumber(MyLibraryFile file)
     {
         String seasonZeroFolder = getDroboxDestNoExt(file);
         seasonZeroFolder = seasonZeroFolder.substring(0, seasonZeroFolder.lastIndexOf(SEP));
@@ -1106,28 +1104,10 @@ public class Archiver implements Runnable, Constants
                 maxEpNum = Math.max(epNum+1, maxEpNum);
             }
         }
-        log(DEBUG, "New season zero episode number for " + seasonZeroFolder +" is "+ maxEpNum);
+        Logger.DEBUG( "New season zero episode number for " + seasonZeroFolder +" is "+ maxEpNum);
         return maxEpNum;
-    }
-
-    
-    //Map over convenience methods
-    private static String shortLogDesc = "";    
-    private static void setShortLogDesc(String desc)
-    {
-        shortLogDesc = desc;
-    }
-    private static void log(int level, String s)
-    {
-        log(level,s,null); 
-    }
-    private static void log(int level, String s, Exception x)
-    {
-        if(level <= Config.LOGGING_LEVEL)
-        {
-            Config.log(level,s,shortLogDesc,x);
-        }
-    }
+    }        
+  
     public static boolean valid(String s)
     {
         return tools.valid(s);

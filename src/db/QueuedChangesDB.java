@@ -6,12 +6,13 @@ import java.util.List;
 import utilities.Config;
 import utilities.Constants;
 import utilities.QueuedChange;
+import static utilities.Constants.*;
 
 /**
  *
  * @author bvidovic
  */
-public class QueuedChangesDB extends SQLiteDB implements Constants
+public class QueuedChangesDB extends SQLiteDB
 {    
     
     public QueuedChangesDB(String dbPath)
@@ -45,7 +46,7 @@ public class QueuedChangesDB extends SQLiteDB implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to get queued meta data changed from SQLite DB: "+x,x);
+            Logger.ERROR( "Failed to get queued meta data changed from SQLite DB: "+x,x);
         }
         finally
         {

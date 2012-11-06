@@ -9,17 +9,17 @@ import java.util.*;
 import org.apache.commons.io.FileUtils;
 import org.jdom.Document;
 import org.jdom.Element;
+import static utilities.Constants.*;
 
-
-public class MusicVideoScraper implements Constants
+public class MusicVideoScraper
 {
     public static void main(String[] args)
     {
-        Config c = new Config(MY_LIBRARY);
+        Config c = new Config();
         String folder = "C:"+SEP+"dropbox"+SEP+"Music Videos";
         if(args == null || args.length == 0)
         {
-            Config.log(WARNING, "No args specified, using default folder of: "+folder);
+            Logger.WARN("No args specified, using default folder of: "+folder);
         }
         else
              folder = args[0];
@@ -31,9 +31,9 @@ public class MusicVideoScraper implements Constants
             {
                 File f = it.next();
                 MusicVideoScraper.scrape(f);
-                Config.log(INFO, "So far: attempts="+attempts+", success="+success+"\tskip="+skip+"\tfail="+fail+"\tqueryCountThisRun="+apiQueryCount);
+                Logger.INFO( "So far: attempts="+attempts+", success="+success+"\tskip="+skip+"\tfail="+fail+"\tqueryCountThisRun="+apiQueryCount);
                 int seconds = r.nextInt(14)+10;//average is ~17.28 seconds in order to stay @ 5,000 per day
-                Config.log(INFO, "Waiting "+ seconds +" seconds before next query to keep Yahoo happy...");
+                Logger.INFO( "Waiting "+ seconds +" seconds before next query to keep Yahoo happy...");
                 try
                 {
                     Thread.sleep(seconds * 1000*0);
@@ -45,7 +45,7 @@ public class MusicVideoScraper implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "General exception: "+ x,x);
+            Logger.ERROR( "General exception: "+ x,x);
         }
         finally
         {
@@ -74,7 +74,7 @@ public class MusicVideoScraper implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to get query count using: "+ sql,x);
+            Logger.ERROR( "Failed to get query count using: "+ sql,x);
         }
         finally
         {
@@ -103,7 +103,7 @@ public class MusicVideoScraper implements Constants
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "Failed to track API query for scraper "+ API_NAME+": "+ x,x);
+            Logger.WARN("Failed to track API query for scraper "+ API_NAME+": "+ x,x);
         }
         finally
         {
@@ -122,7 +122,7 @@ public class MusicVideoScraper implements Constants
                 List<Element> videos = root.getChildren("Video");
                 if(videos.isEmpty())
                 {
-                    Config.log(WARNING, "In XML from API, no <Video> elements found under <Videos>, cannot create .nfo.");
+                    Logger.WARN("In XML from API, no <Video> elements found under <Videos>, cannot create .nfo.");
                     fail++;
                     return false;
                 }
@@ -145,7 +145,7 @@ public class MusicVideoScraper implements Constants
                     }
                     catch(Exception x)
                     {
-                        Config.log(INFO, "Failed to get runtime min:sec from: "+ strSeconds);
+                        Logger.INFO( "Failed to get runtime min:sec from: "+ strSeconds);
                     }
                 }
                 String genre = null;
@@ -168,14 +168,14 @@ public class MusicVideoScraper implements Constants
                     if(tools.valid(title)) lines.add("<title>"+title+"</title>");
                     else
                     {
-                        Config.log(WARNING, "Title is not available, cannot continue.");
+                        Logger.WARN("Title is not available, cannot continue.");
                         fail++;
                         return false;
                     }
                     if(tools.valid(artist)) lines.add("<artist>"+artist+"</artist>");
                     else
                     {
-                        Config.log(WARNING, "artist is not available, cannot continue.");
+                        Logger.WARN("artist is not available, cannot continue.");
                         fail++;
                         return false;
                     }
@@ -190,13 +190,13 @@ public class MusicVideoScraper implements Constants
                 boolean written = tools.writeToFile(nfoFile, lines, true);
                 if(written)
                 {
-                    Config.log(INFO, "Created .nfo at: "+ nfoFile);                    
+                    Logger.INFO( "Created .nfo at: "+ nfoFile);                    
                     
                     //get the image
                     File imageFile = new File(nfoFile.getPath().substring(0, nfoFile.getPath().lastIndexOf("."))+".tbn");
                     if(imageFile.exists())
                     {
-                        Config.log(INFO, "Image already exists, skipping downloading image: "+ imageFile);
+                        Logger.INFO( "Image already exists, skipping downloading image: "+ imageFile);
                     }
                     else
                     {
@@ -216,14 +216,14 @@ public class MusicVideoScraper implements Constants
                             }
                             catch(Exception x)
                             {
-                                Config.log(WARNING, "Failed to get image info: "+x,x);
+                                Logger.WARN("Failed to get image info: "+x,x);
                             }
                         }
 
                         if(tools.valid(imageUrl))
                         {
                             boolean saved = saveImage(imageUrl, imageFile);
-                            if(saved)Config.log(INFO, "Saved image to: "+ imageFile +" from "+ imageUrl);
+                            if(saved)Logger.INFO( "Saved image to: "+ imageFile +" from "+ imageUrl);
                         }
                     }
 
@@ -231,7 +231,7 @@ public class MusicVideoScraper implements Constants
                 }
                 else//failed to write .nfo
                 {
-                    Config.log(ERROR, "Failed to write .nfo at: "+ nfoFile);
+                    Logger.ERROR( "Failed to write .nfo at: "+ nfoFile);
                     fail++;
                     return false;
                 }
@@ -239,14 +239,14 @@ public class MusicVideoScraper implements Constants
             }
             catch(Exception x)
             {
-                Config.log(WARNING, "Error while parsing XML. Cannot create .nfo: "+ x);
+                Logger.WARN("Error while parsing XML. Cannot create .nfo: "+ x);
                 fail++;
                 return false;
             }
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "General error while creating .nfo: "+x,x);
+            Logger.ERROR( "General error while creating .nfo: "+x,x);
             return false;
         }
     }
@@ -259,11 +259,11 @@ public class MusicVideoScraper implements Constants
         int past24hrQueryCount = getQueryCountInPast24Hours();
         if(past24hrQueryCount >= MAX_QUERIES_24HR)
         {
-            Config.log(NOTICE, "Disabling music video pre-scraper because "+ past24hrQueryCount+" queries have been executed for the "+ API_NAME +" API in the past 24 hours, the max allowed is: "+MAX_QUERIES_24HR);
+            Logger.NOTICE( "Disabling music video pre-scraper because "+ past24hrQueryCount+" queries have been executed for the "+ API_NAME +" API in the past 24 hours, the max allowed is: "+MAX_QUERIES_24HR);
             Config.SCRAPE_MUSIC_VIDEOS = false;
             return false;
         }
-        Config.log(DEBUG, "Queries in past 24 hours for "+ API_NAME +" api = "+ past24hrQueryCount +", max allowed = "+ MAX_QUERIES_24HR +", remaining = "+ (MAX_QUERIES_24HR-past24hrQueryCount));
+        Logger.DEBUG( "Queries in past 24 hours for "+ API_NAME +" api = "+ past24hrQueryCount +", max allowed = "+ MAX_QUERIES_24HR +", remaining = "+ (MAX_QUERIES_24HR-past24hrQueryCount));
 
 
         //Config.setShortLogDesc("GetXML");
@@ -271,7 +271,7 @@ public class MusicVideoScraper implements Constants
         {
             if(!musicVideoFile.exists() || !musicVideoFile.isFile())
             {
-                Config.log(WARNING, "Music video file does not exist. Cannot scrape: "+ musicVideoFile);
+                Logger.WARN("Music video file does not exist. Cannot scrape: "+ musicVideoFile);
                 fail++;
                 return false;
             }
@@ -279,12 +279,12 @@ public class MusicVideoScraper implements Constants
             File nfoFile = new File(musicVideoFile.getPath().substring(0, musicVideoFile.getPath().lastIndexOf("."))+".nfo");            
             if(nfoFile.exists())
             {
-                Config.log(DEBUG, "NFO File already exists, skipping scrape for: "+ nfoFile);
+                Logger.DEBUG( "NFO File already exists, skipping scrape for: "+ nfoFile);
                 skip++;
                 return false;
             }
 
-            Config.log(INFO, "Scraping info for music video: "+ musicVideoFile);
+            Logger.INFO( "Scraping info for music video: "+ musicVideoFile);
 
             String artist = null, title = null;
             String name = musicVideoFile.getName();
@@ -302,7 +302,7 @@ public class MusicVideoScraper implements Constants
             }
             catch(Exception x)
             {
-                Config.log(WARNING, "Failed to parse file name: "+ name+". Error: "+x);
+                Logger.WARN("Failed to parse file name: "+ name+". Error: "+x);
                 fail++;
                 return false;
             }
@@ -324,14 +324,14 @@ public class MusicVideoScraper implements Constants
             {
                 if(lastqueried.longValue() == SQL_ERROR)
                 {
-                    Config.log(WARNING, "Cannot determine when the last query for this url was. Allowing new query: "+url);
+                    Logger.WARN("Cannot determine when the last query for this url was. Allowing new query: "+url);
                 }
                 else
                 {
                     long oneDayAgo = System.currentTimeMillis() - ONE_DAY;
                     if(lastqueried > oneDayAgo)
                     {
-                        Config.log(INFO, "This query was perormed in the last 24 hours ("+(Config.log_sdf.format(new Date(lastqueried)))+"), skipping re-query until 24 hours has passed.");
+                        Logger.INFO( "This query was perormed in the last 24 hours ("+(Config.log_sdf.format(new Date(lastqueried)))+"), skipping re-query until 24 hours has passed.");
                         skip++;
                         return false;
                     }
@@ -345,7 +345,7 @@ public class MusicVideoScraper implements Constants
             
             if(xml == null)
             {
-                Config.log(WARNING, "Failed to retrieve XML from: "+url);
+                Logger.WARN("Failed to retrieve XML from: "+url);
                 fail++;
                 return false;
             }
@@ -354,14 +354,14 @@ public class MusicVideoScraper implements Constants
                 List<Element> matches = xml.getRootElement().getChildren("Video");
                 if(matches.isEmpty())
                 {
-                    Config.log(INFO,"No matching videos were found from query: "+ url);
+                    Logger.INFO("No matching videos were found from query: "+ url);
                     fail++;
                     return false;
                 }                
             }
             else
             {
-                Config.log(WARNING, "XML found at "+ url +" does not have a root element");
+                Logger.WARN("XML found at "+ url +" does not have a root element");
                 fail++;
                 return false;
             }
@@ -374,7 +374,7 @@ public class MusicVideoScraper implements Constants
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "General error while parsing files: "+ x,x);
+            Logger.ERROR( "General error while parsing files: "+ x,x);
             return false;
         }
     }
@@ -432,7 +432,7 @@ public class MusicVideoScraper implements Constants
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "Failed to save image: "+ imageUrl +" to "+ destinationFile,x);
+            Logger.WARN("Failed to save image: "+ imageUrl +" to "+ destinationFile,x);
             return false;
         }
     }

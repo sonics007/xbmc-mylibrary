@@ -11,8 +11,9 @@ import utilities.Config;
 import utilities.Param;
 import utilities.Source;
 import utilities.Subfolder;
-import utilities.XBMCFile;
+import utilities.MyLibraryFile;
 import utilities.tools;
+import static utilities.Constants.*;
 /**
  *
  * @author bvidovic
@@ -64,7 +65,7 @@ public class ArchivedFilesDB extends SQLiteDB
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to query for archived file at: "+ dropboxLocation,x);
+            Logger.ERROR( "Failed to query for archived file at: "+ dropboxLocation,x);
             return null;
         }
         finally
@@ -74,9 +75,9 @@ public class ArchivedFilesDB extends SQLiteDB
         return archivedFile;
     }
     
-    public XBMCFile getVideoWithMetaDataFromDB(String preparedStmtSQL, List<Param> params)
+    public MyLibraryFile getVideoWithMetaDataFromDB(String preparedStmtSQL, List<Param> params)
     {
-        XBMCFile video = null;
+        MyLibraryFile video = null;
         try
         {
             PreparedStatement stmt = getStatement(preparedStmtSQL);
@@ -86,7 +87,7 @@ public class ArchivedFilesDB extends SQLiteDB
 
             if(rs.next())
             {
-                video = new XBMCFile(rs.getString("original_path"));
+                video = new MyLibraryFile(rs.getString("original_path"));
                 video.setType(rs.getString("video_type"));
                 video.setTitle("title");
                 video.setHasBeenLookedUpOnTVDB(rs.getInt("is_tvdb_lookup") == 1);
@@ -114,7 +115,7 @@ public class ArchivedFilesDB extends SQLiteDB
                 }
                 else
                 {
-                    Config.log(WARNING, "Video type (TV/Movie/Music Video/Generic) cannot be determined using: "+preparedStmtSQL);
+                    Logger.WARN( "Video type (TV/Movie/Music Video/Generic) cannot be determined using: "+preparedStmtSQL);
                     return null;
                 }
                 String dropboxLocation = rs.getString("dropbox_location");//always a .strm out of the database                                
@@ -125,13 +126,13 @@ public class ArchivedFilesDB extends SQLiteDB
             }
             else
             {
-                Config.log(WARNING, "No video found in the database using SQL: "+preparedStmtSQL);
+                Logger.WARN( "No video found in the database using SQL: "+preparedStmtSQL);
                 return null;
             }
         }
         catch(Exception x)
         {
-            Config.log(ERROR, "Failed to get meta data from database for using SQL: "+ preparedStmtSQL,x);
+            Logger.ERROR( "Failed to get meta data from database for using SQL: "+ preparedStmtSQL,x);
             return null;
         }
         finally
@@ -150,7 +151,7 @@ public class ArchivedFilesDB extends SQLiteDB
 
         if(dateArchived != null)
         {
-            Config.log(DEBUG, "Found date archived: "+ new Date(dateArchived)+" for archived file: "+ archivedFile);
+            Logger.DEBUG( "Found date archived: "+ new Date(dateArchived)+" for archived file: "+ archivedFile);
             return dateArchived;
         }
         else
@@ -158,12 +159,12 @@ public class ArchivedFilesDB extends SQLiteDB
             File f = new File(archivedFile);
             if(f.exists())
             {
-                Config.log(WARNING, "Could not get date archived for file \""+archivedFile+"\". (SQL = "+ sql+"). Will use last modified date of "+ new Date(f.lastModified()));
+                Logger.WARN( "Could not get date archived for file \""+archivedFile+"\". (SQL = "+ sql+"). Will use last modified date of "+ new Date(f.lastModified()));
                 return f.lastModified();
             }
             else
             {
-                Config.log(ERROR, "Cannot find date archive for file \""+archivedFile+"\" and the file no longer exits.");
+                Logger.ERROR( "Cannot find date archive for file \""+archivedFile+"\" and the file no longer exits.");
                 return null;
             }
         }

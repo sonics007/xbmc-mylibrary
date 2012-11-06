@@ -3,7 +3,9 @@ import java.io.BufferedReader;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ReaderTimeout implements Runnable, Constants
+import static utilities.Constants.*;
+
+public class ReaderTimeout implements Runnable
 {
 
     private int timeoutSec;
@@ -27,7 +29,7 @@ public class ReaderTimeout implements Runnable, Constants
 
     public void timeout()
     {
-        //Config.log(DEBUG, "ReaderTimeout thread started for "+ timeoutSec + " second timeout....");        
+        //Logger.DEBUG( "ReaderTimeout thread started for "+ timeoutSec + " second timeout....");        
 
         while(!CANCELED)
         {
@@ -45,12 +47,12 @@ public class ReaderTimeout implements Runnable, Constants
 
             catch(Exception x)
             {
-                Config.log(WARNING, "Failed while waiting for Reader Timeout: "+ x,x);
+                Logger.WARN( "Failed while waiting for Reader Timeout: "+ x,x);
                 cancelTimeout();
                 break;
             }
         }
-        Config.log(DEBUG,"ReaderTimeout exited, cancelled = "+ CANCELED+", timedOut = "+ timedOut);
+        Logger.DEBUG("ReaderTimeout exited, cancelled = "+ CANCELED+", timedOut = "+ timedOut);
 
         if(!CANCELED && !hasTimedOut())//if neither one of these are true, getLines() would never end. Force one to true (shouldn't happen)
             cancelTimeout();
@@ -63,7 +65,7 @@ public class ReaderTimeout implements Runnable, Constants
             try{Thread.sleep(50);}catch(Exception x){timedOut=true;}
         }
         if(timedOut)
-            Config.log(WARNING, "Reader timed out after "+ timeoutSec +" seconds. Data may be incomplete.");
+            Logger.WARN( "Reader timed out after "+ timeoutSec +" seconds. Data may be incomplete.");
 
         return lines;
     }
@@ -90,7 +92,7 @@ public class ReaderTimeout implements Runnable, Constants
 
         catch(Exception x)
         {
-            Config.log(ERROR, "Error while reading from BufferedReader: "+x,x);
+            Logger.ERROR( "Error while reading from BufferedReader: "+x,x);
         }
     }
 
@@ -101,16 +103,16 @@ public class ReaderTimeout implements Runnable, Constants
     
     private void forceClose()
     {
-        Config.log(INFO, "Attempting to force closed input stream because it timed out.");
+        Logger.INFO( "Attempting to force closed input stream because it timed out.");
         timedOut = true;
         try
         {
-            Config.log(WARNING, "Killing Reader thread because it timed out");
+            Logger.WARN( "Killing Reader thread because it timed out");
             readerThread.stop();
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "Failed to close reader: "+x,x);
+            Logger.WARN( "Failed to close reader: "+x,x);
         }
     }
 }

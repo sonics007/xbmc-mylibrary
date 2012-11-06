@@ -7,7 +7,9 @@ import java.sql.ResultSet;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-public class XBMCInterface implements Constants
+import static utilities.Constants.*;
+
+public class XBMCInterface
 {    
     
     Database xbmcDB = null;
@@ -109,7 +111,7 @@ public class XBMCInterface implements Constants
             }
             catch(FileNotFoundException x)//Not really an "exception" because this is expected for thing like plugin:// or http:// files
             {
-                Config.log(DEBUG, "Will assume this file exists. This file is not on the Windows filesystem: "+ nextXBMCPath+". Details: "+x);
+                Logger.DEBUG( "Will assume this file exists. This file is not on the Windows filesystem: "+ nextXBMCPath+". Details: "+x);
                 windowsFiles.add(null);
             }
         }
@@ -126,14 +128,14 @@ public class XBMCInterface implements Constants
     public void close()
     {
         xbmcDB.close();
-        Config.log(Config.DEBUG, "Closed connection to XBMC database.");
+        Logger.DEBUG( "Closed connection to XBMC database.");
     }
 
     public void addMetaDataFromQueue()
     {
         Config.setShortLogDesc("Meta-Data");
         List<QueuedChange> queuedChanges = Config.queuedChangesDB.getQueuedChanges();
-        Config.log(NOTICE, "Attempting to integrate "+ queuedChanges.size() +" queued meta-data changes into XBMC's MySQL video library.");
+        Logger.NOTICE( "Attempting to integrate "+ queuedChanges.size() +" queued meta-data changes into XBMC's MySQL video library.");
         List<QueuedChange> changesToDelete = new ArrayList<QueuedChange>();//these are the changes that are no longer valid
         List<QueuedChange> changesCompleted = new ArrayList<QueuedChange>();//these are the changes that were succseefully implemented
         Set<String> strmsNotInLibrary = new HashSet<String>();
@@ -148,7 +150,7 @@ public class XBMCInterface implements Constants
                 if(!archivedStrmFile.exists())
                 {//.strm doesnt exist in dropbox                   
                     changesToDelete.add(qc);
-                    Config.log(INFO, "REMOVE: This video no longer exists in the dropbox, so it is being removed from meta-data queue: "+ archivedStrmFile);
+                    Logger.INFO( "REMOVE: This video no longer exists in the dropbox, so it is being removed from meta-data queue: "+ archivedStrmFile);
                     continue;
                 }
 
@@ -170,7 +172,7 @@ public class XBMCInterface implements Constants
                 if (tools.valid(Config.LINUX_SAMBA_PREFIX ))
                 {
                 	xbmcPath = utilities.Config.LINUX_SAMBA_PREFIX + xbmcPath;
-                	Config.log(DEBUG, "Using LINUX_SAMBA_PREFIX. Concatentated path: "+ xbmcPath);
+                	Logger.DEBUG( "Using LINUX_SAMBA_PREFIX. Concatentated path: "+ xbmcPath);
                 }
 
                 //check if it is in the video library database
@@ -193,34 +195,116 @@ public class XBMCInterface implements Constants
                         String setName = value;
                         if(!tools.valid(setName))
                         {
-                            Config.log(DEBUG, "OK: movie set name is empty, will not add to a movie set: "+ archivedStrmFile);
+                            Logger.DEBUG( "OK: movie set name is empty, will not add to a movie set: "+ archivedStrmFile);
                             changesCompleted.add(qc);
                             continue;
                         }
 
                         int setId = getMovieSetIDAndCreateIfDoesntExist(setName);
                         if(setId < 0) throw new Exception("Failed to find movie set named \""+setName+"\". Will skip this video for now: "+ archivedStrmFile);
-                        String checkSql = "SELECT idSet FROM setlinkmovie WHERE idSet = ? AND idMovie = ?";
-                        int movieId = xbmcDB.getSingleInt(checkSql, tools.params(setId,video_id));
-                        if(movieId == SQL_ERROR)
+                        String checkSql = "SELECT idSet FROM movie WHERE idMovie = ?";
+                        int setIdFound = xbmcDB.getSingleInt(checkSql, tools.params(video_id));
+                        if(setIdFound == SQL_ERROR)
                             throw new Exception("Cannot determine if movie already exists in movie set using: "+ checkSql);
 
-                        boolean movieAlreadyExistsInSet = movieId > -1;
+                        boolean movieAlreadyExistsInSet = setIdFound == setId;
                         if(movieAlreadyExistsInSet)
                         {
-                            Config.log(DEBUG, "OK: This movie already exists in the set \""+setName+"\", skipping.");
+                            Logger.DEBUG( "OK: This movie already exists in the set \""+setName+"\", skipping.");
                             changesCompleted.add(qc);
                             continue;
                         }
                         
-                        String addToMovieSetSQL = "INSERT INTO setlinkmovie (idSet, idMovie) VALUES(?, ?)";
+                        boolean movieBelongsToDifferentSet = setIdFound > 0;//found valid set it, but not the one we are looking for
+                        //in XBMC Frodo movies can only belong to one set (favors using tags for many-to-many relationships)
+                        //don't over-write the existing set
+                        if(movieBelongsToDifferentSet)
+                        {
+                            String existingSetName = xbmcDB.getSingleString("SELECT strSet FROM sets WHERE idSet = ?", tools.params(setIdFound));
+                            Logger.WARN("This movie already belongs to a different set ("+existingSetName+"), will not overwrite (use movie tags instead). Not adding to movie_set: "+ setName+": "+fileName);
+                            changesCompleted.add(qc);
+                            continue;
+                        }
+                        
+                        String addToMovieSetSQL = "UPDATE movie SET idSet = ? WHERE idMovie = ?";
                         boolean success = xbmcDB.executeSingleUpdate(addToMovieSetSQL, tools.params(setId,video_id));
                         if(success)
                         {
-                            Config.log(INFO, "SUCCESS: added to movie set named \"" + value + "\": " + archivedStrmFile);
+                            Logger.INFO( "SUCCESS: added to movie set named \"" + value + "\": " + archivedStrmFile);
                             changesCompleted.add(qc);
                         }
                         else throw new Exception("Failed to add to movie set \""+value+"\": "+archivedStrmFile+" using SQL: "+addToMovieSetSQL);
+                    }
+                    else if(MOVIE_TAGS.equals(metaDataType))
+                    {
+                        String movieTagsSql = "SELECT t.strTag "
+                                + "FROM tag t, taglinks tl "
+                                + "WHERE t.idTag = tl.idTag "
+                                + "AND tl.idMedia = ? "
+                                + "AND tl.media_type = ?";
+                        List<String> currentTags = xbmcDB.getStringList(movieTagsSql , tools.params(video_id, "movie"));
+                        String strDesiredTags = value;
+                        List<String> desiredTags = new ArrayList<String>();
+                        if(strDesiredTags.contains("|"))                        
+                            desiredTags.addAll(Arrays.asList(strDesiredTags.split("\\|")));
+                        else
+                            desiredTags.add(strDesiredTags);//single tag
+                        
+                        List<String> tagsToAdd = new ArrayList<String>();
+                        List<String> tagsToRemove = new ArrayList<String>();
+                        
+                        for(String currentTag : currentTags){
+                            if(!desiredTags.contains(currentTag))//this existing tag is not desired
+                                tagsToRemove.add(currentTag);
+                        }
+                        for(String desiredTag : desiredTags){
+                            if(!currentTags.contains(desiredTag))//this desired tag is not existing currently... add it
+                                if(tools.valid(desiredTag))
+                                    tagsToAdd.add(desiredTag);
+                        }
+                        
+                        if(currentTags.size() != desiredTags.size())
+                        {
+                            Logger.INFO( "Movie Tags for "+ archivedStrmFile +"\r\n"
+                                    + "Current: "+ currentTags + "\r\n"
+                                    + "Desired: " + desiredTags);
+
+                            Logger.INFO( "Found "+ tagsToAdd.size() +" tags to add and "+ tagsToRemove.size() +" tags to remove for "+ archivedStrmFile);
+                        }
+                        
+                        //add
+                        for(String tagToAdd : tagsToAdd){
+                            
+                            int tagId = getMovieTagIDAndCreateIfDoesntExist(tagToAdd);
+                            String tagAddSQL = "INSERT INTO taglinks(idTag, idMedia, media_type) "
+                                            +  "VALUES(?,?,?)";
+                            boolean successAdd = xbmcDB.executeSingleUpdate(tagAddSQL, tools.params(tagId, video_id, "movie"));
+                            if(successAdd)
+                            {
+                                Logger.INFO( "SUCCESS: added movie tag \""+tagToAdd+"\" to movie: " + archivedStrmFile);                                
+                            }
+                            else throw new Exception("Failed to add movie tag \""+tagToAdd+"\" using SQL: "+tagAddSQL);
+                            
+                        }
+                        
+                        //remove (note this will remove any tags the user manually added via gui for the .strms... probably OK)
+                        for(String tagToRemove : tagsToRemove){
+                            int tagId = getMovieTagIDAndCreateIfDoesntExist(tagToRemove);
+                            String tagRemoveSQL = "DELETE FROM taglinks "
+                                    + "WHERE idTag = ? "
+                                    + "AND idMedia = ? "
+                                    + "AND media_type = ?";
+                            boolean successRemove = xbmcDB.executeSingleUpdate(tagRemoveSQL, tools.params(tagId, video_id, "movie"));
+                            if(successRemove)
+                            {
+                                Logger.INFO( "SUCCESS: removed old movie tag \""+tagToRemove+"\" from movie: " + archivedStrmFile);                                
+                            }
+                            else throw new Exception("Failed to remove old movie tag \""+tagToRemove+"\" using SQL: "+tagRemoveSQL);
+                            
+                        }
+                        
+                        //completed changes for movie_tags
+                        changesCompleted.add(qc);
                     }
                     else if(PREFIX.equals(metaDataType) || SUFFIX.equals(metaDataType))
                     {
@@ -246,7 +330,7 @@ public class XBMCInterface implements Constants
                         }
                         else
                         {
-                            Config.log(WARNING,"REMOVE: Unknown video type: \""+ videoType+"\", will not update meta data");
+                            Logger.WARN("REMOVE: Unknown video type: \""+ videoType+"\", will not update meta data");
                             changesToDelete.add(qc);
                             continue;
                         }
@@ -275,7 +359,7 @@ public class XBMCInterface implements Constants
                         
                         if(!tools.valid(value))
                         {
-                            Config.log(DEBUG, "OK: "+xFix +" is empty, no need to change anything for: "+ archivedStrmFile);
+                            Logger.DEBUG( "OK: "+xFix +" is empty, no need to change anything for: "+ archivedStrmFile);
                             changesCompleted.add(qc);
                             continue;
                         }
@@ -286,20 +370,20 @@ public class XBMCInterface implements Constants
                         boolean needsUpdate = videoIdNeedingXfix > -1;//needs the update if this returns a valid id. Means it doesnt alread have the xFix value
                         if(!needsUpdate)
                         {
-                            Config.log(INFO,"OK: Not updating because this video already has the "+ xFix + "\""+value+"\" at "+archivedStrmFile);
+                            Logger.INFO("OK: Not updating because this video already has the "+ xFix + "\""+value+"\" at "+archivedStrmFile);
                             changesCompleted.add(qc);
                             continue;
                         }
                         
                         String sql = "UPDATE "+table+ " SET " + field + " = " + concat +" WHERE "+idField+" = ?"+safeUpdate;
                         
-                        Config.log(DEBUG,"Executing: "+sql);
+                        Logger.DEBUG("Executing: "+sql);
                         boolean success = xbmcDB.executeSingleUpdate(sql,tools.params(value,video_id,wildCardValue));
                         if(!success)
-                            Config.log(WARNING, "Failed to add prefix/suffix with SQL: "+ sql+". Will try again next time...");
+                            Logger.WARN( "Failed to add prefix/suffix with SQL: "+ sql+". Will try again next time...");
                         else
                         {
-                            Config.log(INFO, "SUCCESS: Added "+xFix +" of \""+value+"\" to title of video: "+ archivedStrmFile + " using: "+ sql);
+                            Logger.INFO( "SUCCESS: Added "+xFix +" of \""+value+"\" to title of video: "+ archivedStrmFile + " using: "+ sql);
                             changesCompleted.add(qc);
                         }
                     }
@@ -312,31 +396,32 @@ public class XBMCInterface implements Constants
             }
             catch(Exception x)
             {
-                Config.log(INFO, "SKIPPING meta-data update: "+x.getMessage());
+                Logger.INFO( "SKIPPING meta-data update: "+x.getMessage());
             }
         }
+        
         int changesDone = (changesCompleted.size() + changesToDelete.size());
         int changesRemaining = queuedChanges.size()-changesDone;
         int numChangesCompleted = queuedChanges.size()- changesRemaining;
-        Config.log(NOTICE, "Successfully completed "+numChangesCompleted+" queued metadata changes. There are now "+ changesRemaining +" changes left in the queue.");
+        Logger.NOTICE( "Successfully completed "+numChangesCompleted+" queued metadata changes. There are now "+ changesRemaining +" changes left in the queue.");
 
-        Config.log(NOTICE, "Updating QueuedChanges database to reflect the "+changesCompleted.size()+" successful metatadata changes.");
+        Logger.NOTICE( "Updating QueuedChanges database to reflect the "+changesCompleted.size()+" successful metatadata changes.");
         for(QueuedChange qc : changesCompleted)
         {
             //update the status as COMPLETED in the sqlite tracker
             boolean updated = Config.queuedChangesDB.executeSingleUpdate("UPDATE QueuedChanges SET status = ? WHERE id = ?"
                     ,tools.params(COMPLETED,qc.getId()));
-            if(!updated)Config.log(ERROR, "Could not update status as "+COMPLETED +" for queued change. This may result in duplicate meta-data for file: "+ qc.getDropboxLocation());
+            if(!updated)Logger.ERROR( "Could not update status as "+COMPLETED +" for queued change. This may result in duplicate meta-data for file: "+ qc.getDropboxLocation());
         }
         
-        Config.log(NOTICE, "Updating QueuedChanges database to reflect the "+changesToDelete.size()+" metatadata changes that are no longer needed.");
+        Logger.NOTICE( "Updating QueuedChanges database to reflect the "+changesToDelete.size()+" metatadata changes that are no longer needed.");
         //delete the ones that can be deleted
         for(QueuedChange qc : changesToDelete)
         {            
             boolean deleted = Config.queuedChangesDB.executeSingleUpdate("DELETE FROM QueuedChanges WHERE id = ?",tools.params(qc.getId()));
-            if(!deleted)Config.log(ERROR, "Could not delete metadata queue file in prep for re-write. This may result in duplicate entries for file: "+ qc.getDropboxLocation());
+            if(!deleted)Logger.ERROR( "Could not delete metadata queue file in prep for re-write. This may result in duplicate entries for file: "+ qc.getDropboxLocation());
         }
-        Config.log(NOTICE, "Done updating metadata queued changed database.");
+        Logger.NOTICE( "Done updating metadata queued changed database.");
     }
 
     public int getMovieSetIDAndCreateIfDoesntExist(String setName)
@@ -353,7 +438,27 @@ public class XBMCInterface implements Constants
                 return xbmcDB.getSingleInt(selectSql,tools.params(setName));//new id
             else
             {
-                Config.log(ERROR, "Failed to create new movie set named \""+setName+"\" using: "+ updateSql);
+                Logger.ERROR( "Failed to create new movie set named \""+setName+"\" using: "+ updateSql);
+                return SQL_ERROR;
+            }
+        }
+    }
+    
+    public int getMovieTagIDAndCreateIfDoesntExist(String movieTagName)
+    {
+        String selectSql = "SELECT idTag FROM tag WHERE strTag = ?";
+        int tagId = xbmcDB.getSingleInt(selectSql,tools.params(movieTagName));
+        if(tagId > -1) return tagId;
+        else
+        {
+            //create tag set
+            String updateSql = "INSERT INTO tag(strTag) VALUES(?)";
+            boolean created = xbmcDB.executeSingleUpdate(updateSql,tools.params(movieTagName));
+            if(created)
+                return xbmcDB.getSingleInt(selectSql,tools.params(movieTagName));//new id
+            else
+            {
+                Logger.ERROR( "Failed to create new movie tag named \""+movieTagName+"\" using: "+ updateSql);
                 return SQL_ERROR;
             }
         }
@@ -378,10 +483,10 @@ public class XBMCInterface implements Constants
             sql = "SELECT idMvideo FROM musicvideo where idFile = ?";
         else
         {
-            Config.log(Config.ERROR, "Updating pointer is currently only available for TV Shows, Movies, and Music Videos. \""+videoType+"\" is not supported.");
+            Logger.ERROR( "Updating pointer is currently only available for TV Shows, Movies, and Music Videos. \""+videoType+"\" is not supported.");
             return SQL_ERROR;
         }
-        Config.log(Config.DEBUG, "Getting video ID with: " + sql);
+        Logger.DEBUG( "Getting video ID with: " + sql);
         int id = xbmcDB.getSingleInt(sql,tools.params(fileId));
         return id;
     }
@@ -413,7 +518,7 @@ public class XBMCInterface implements Constants
     public int getPathIdFromPathString(String path)
     {
         String sql = "SELECT idPath FROM path WHERE lower(strPath) = ?";
-        Config.log(Config.DEBUG, "Getting pathId with: " + sql);
+        Logger.DEBUG( "Getting pathId with: " + sql);
         int pathId = xbmcDB.getSingleInt(sql,tools.params(path.toLowerCase()));
         return pathId;
     }
@@ -427,11 +532,11 @@ public class XBMCInterface implements Constants
         {
             //get the file id based on path id and fileName
             String sql = "SELECT idFile FROM files WHERE idPath = ? AND lower(strFilename) = ?";
-            Config.log(Config.DEBUG, "Getting fileId with: " + sql);
+            Logger.DEBUG( "Getting fileId with: " + sql);
             fileId = xbmcDB.getSingleInt(sql,tools.params(pathId, fileName.toLowerCase()));
         }
         else
-            Config.log(Config.DEBUG, "Not attempting to get file id because path was not found.");
+            Logger.DEBUG( "Not attempting to get file id because path was not found.");
         return fileId;
     }
 
@@ -457,7 +562,7 @@ public class XBMCInterface implements Constants
         }
         catch(Exception x)
         {
-            Config.log(Config.ERROR, "Could not execute query: " + sql, x);
+            Logger.ERROR( "Could not execute query: " + sql, x);
             return null;
         }
         finally

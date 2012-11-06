@@ -1,8 +1,8 @@
 
 package utilities;
 
-
-public class ExternalCompression implements Constants, Runnable
+import static utilities.Constants.*;
+public class ExternalCompression implements Runnable
 {
     String command;
     String cmdFile;
@@ -22,11 +22,11 @@ public class ExternalCompression implements Constants, Runnable
 
     public void run()
     {
-        Config. log(Config.DEBUG, "External compression thread started...");
+        Config. Logger.DEBUG( "External compression thread started...");
         try
         {
-            Config. log(Config.INFO, "Executing .cmd file: \"" + cmdFile+"\"");
-            Config. log(Config.INFO, "Executing command: "+command);
+            Logger.INFO( "Executing .cmd file: \"" + cmdFile+"\"");
+            Logger.INFO( "Executing command: "+command);
 
             ProcessBuilder pb = new ProcessBuilder("\""+cmdFile+"\"");
             pb.redirectErrorStream();
@@ -35,9 +35,9 @@ public class ExternalCompression implements Constants, Runnable
         }
          catch(Exception e)
          {
-            Config. log(Config.ERROR, "External compression command failed. Please check your command: " + command,e);
+            Logger.ERROR( "External compression command failed. Please check your command: " + command,e);
          }
 
-         Config. log(Config.INFO, "External compression has been started.");
+         Logger.INFO( "External compression has been started.");
     }
 }

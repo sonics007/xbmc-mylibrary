@@ -5,11 +5,18 @@ package utilities;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.regex.*;
+import static utilities.Constants.*;
 
-public class PlayOnArchiver implements Constants
+public class PlayOnArchiver
 {
+    
+    public static void main(String[] args){
+        
+        //test pattern matching
+        
+    }
 
-    public static boolean doComedyCentral(XBMCFile video)
+    public static boolean doComedyCentral(MyLibraryFile video)
     {
         //parse dailyshow/colbert report dates from label. Looks like "February 15, 2011 - January Jones"
         String fullPath = video.getFullPathEscaped();
@@ -30,7 +37,7 @@ public class PlayOnArchiver implements Constants
             }
             if(!video.getFileLabel().contains(" - "))
             {
-                Config.log(WARNING, "Cannot parse Daily Show/Colbert Report episode because ' - ' was not found in the title");
+                Logger.WARN( "Cannot parse Daily Show/Colbert Report episode because ' - ' was not found in the title");
                 return false;
             }
 
@@ -44,16 +51,16 @@ public class PlayOnArchiver implements Constants
             {
                 airDate = dailyShowSDF.parse(textDate);
                 video.setOriginalAirDate(tools.toTVDBAiredDate(airDate));
-                Config.log(DEBUG, "Original Air date = "+ video.getOriginalAirDate());
+                Logger.DEBUG( "Original Air date = "+ video.getOriginalAirDate());
             }
             catch(Exception x)
             {
-                Config.log(WARNING, "The PlayOn Comedy Central Daily Show/Colbert Report episode named \""+video.getFileLabel()+"\" cannot be looked up "
+                Logger.WARN( "The PlayOn Comedy Central Daily Show/Colbert Report episode named \""+video.getFileLabel()+"\" cannot be looked up "
                         + "because a date could be parsed from the title using date format: "+ dailyShowSDF.toPattern(),x);
             }
             boolean successfulLookup = TVDB.lookupTVShow(video);
             if(!successfulLookup)
-                Config.log(WARNING, "TVDB lookup failed for Daily Show/Cobert report episode: "+ video.getFullPathEscaped());
+                Logger.WARN( "TVDB lookup failed for Daily Show/Cobert report episode: "+ video.getFullPathEscaped());
             return successfulLookup;
         }
         else if(southpark)
@@ -75,24 +82,24 @@ public class PlayOnArchiver implements Constants
                 }
                 catch(Exception x)
                 {
-                    Config.log(WARNING, "Failed to parse PlayOn Comedy Central South park episode: "+ video.getFullPathEscaped(),x);
+                    Logger.WARN( "Failed to parse PlayOn Comedy Central South park episode: "+ video.getFullPathEscaped(),x);
                     return false;
                 }
             }
             else
             {
-                Config.log(INFO, "Cannot find SxxExx pattern in PlayOn Comedy Central SouthPark filename, cannot archive: " + video.getFileLabel());
+                Logger.INFO( "Cannot find SxxExx pattern in PlayOn Comedy Central SouthPark filename, cannot archive: " + video.getFileLabel());
                 return false;
             }
         }
         else//unknown type
         {
-            Config.log(INFO, "This PlayOn Comedy Central video does not have custom parsing available, will try standard parse: "+ video.getFullPathEscaped());
+            Logger.INFO( "This PlayOn Comedy Central video does not have custom parsing available, will try standard parse: "+ video.getFullPathEscaped());
             return false;
         }
     }
     
-    public static boolean doHuluCBS(XBMCFile video, boolean isHulu, boolean isCBS)
+    public static boolean doHuluCBS(MyLibraryFile video, boolean isHulu, boolean isCBS)
     {
         String matchingPattern = null;
         if(!video.knownType() || video.isTvShow())
@@ -119,16 +126,16 @@ public class PlayOnArchiver implements Constants
         }
         else//do hulu/cbs have music videos?
         {
-            Config.log(WARNING, "Cannot Archive: Type of content cannot be auto-determined for Hulu video: "+ video.getFullPathEscaped());
+            Logger.WARN( "Cannot Archive: Type of content cannot be auto-determined for Hulu video: "+ video.getFullPathEscaped());
             success = false;
         }
 
-        Config.log(DEBUG, (isCBS ? "CBS": "Hulu")+": success="+success+"; "+ (video.isTvShow() ? "TV: series="+video.getSeries()+"; title="+video.getTitle()+", "
+        Logger.DEBUG( (isCBS ? "CBS": "Hulu")+": success="+success+"; "+ (video.isTvShow() ? "TV: series="+video.getSeries()+"; title="+video.getTitle()+", "
                 + "season="+video.getSeasonNumber()+", episode="+video.getEpisodeNumber() : "Movie: "+ video.getTitle())+" --- "+ video.getFullPathEscaped());
         return success;
     }
     
-    private static boolean addHuluOrCBSTvEpisodeMetaData(XBMCFile video, String seasonEpisodeNaming)
+    private static boolean addHuluOrCBSTvEpisodeMetaData(MyLibraryFile video, String seasonEpisodeNaming)
     {
         //parse season/episode numbers
         try
@@ -156,33 +163,33 @@ public class PlayOnArchiver implements Constants
 
             if(!tools.valid(video.getSeries()))
             {
-                Config.log(WARNING, "Series cannot be found from Hulu/CBS path: "+ video.getFullPathEscaped());
+                Logger.WARN( "Series cannot be found from Hulu/CBS path: "+ video.getFullPathEscaped());
                 return false;
             }
 
             //get the title (not required for scraping
             if(!tools.valid(video.getTitle()))
             {
-                Config.log(INFO, "Title cannot be parsed for this video, it will be set to the file name: \""+ video.getFileLabel()+"\"");
+                Logger.INFO( "Title cannot be parsed for this video, it will be set to the file name: \""+ video.getFileLabel()+"\"");
                 video.setTitle(video.getFileLabel());
             }
             return true;
         }
         catch(Exception x)
         {
-            Config.log(WARNING, "This Hulu/CBS video was thought to be a TV show, but the season/episode numbers and/or title could not be parsed: "+ video.getFullPathEscaped(),x);
+            Logger.WARN( "This Hulu/CBS video was thought to be a TV show, but the season/episode numbers and/or title could not be parsed: "+ video.getFullPathEscaped(),x);
             return false;
         }
     }
 
-    public static boolean doNetflix(XBMCFile video)
+    public static boolean doNetflix(MyLibraryFile video)
     {
         //pattern one, matches most normal TV season/episode patterns for netflix
-        Pattern seasonEpisodePattern = Pattern.compile("(season|series|vol\\.) [0-9]+/[0-9][0-9]:",Pattern.CASE_INSENSITIVE);//Netflix/New Arrivals/New TV to watch instantly/A-B/3rd Rock from the Sun: Season 3/08: A Friend in Dick
-        Matcher seasonEpisodeMatcher = seasonEpisodePattern.matcher(video.getFullPathEscaped());
+        Pattern seasonEpisodePattern = Pattern.compile("^S[0-9]+E[0-9]+",Pattern.CASE_INSENSITIVE);//Netflix/Instant Queue/#/30 Days/30 Days: Season 3/S03E01 - Working in a Coal Mine
+        Matcher seasonEpisodeMatcher = seasonEpisodePattern.matcher(video.getFileLabel());//S03E01 - Working in a Coal Mine
         
         //another pattern to find when no season/series word is specified        
-        Pattern seasonEpisodePattern2 = Pattern.compile("/[0-9]+/[0-9][0-9]:");//Netflix/Instant Queue/Alphabetical/B/Blue's Clues/5/28: Our Neighborhood Festival
+        Pattern seasonEpisodePattern2 = Pattern.compile("/[0-9]+/S?[0-9]+E?[0-9]+");//Netflix/Instant Queue/Alphabetical/B/Blue's Clues/5/28: Our Neighborhood Festival
         Matcher seasonEpisodeMatcher2 = seasonEpisodePattern2.matcher(video.getFullPathEscaped());
 
         //pattern that matches absolutely numbered TV shows (no season)
@@ -194,14 +201,12 @@ public class PlayOnArchiver implements Constants
             //get season and episode numbers
             try
             {
-                if(seasonEpisodeMatcher.find())//looks like "/30 Rock Season 1/1: Pilot"
+                if(seasonEpisodeMatcher.find())//looks like "S03E01"
                 {
                     video.setType(TV_SHOW);
-                    String match = seasonEpisodeMatcher.group();// "season 1/02:"
-                    int seasonNum = Integer.parseInt(match.substring(match.indexOf(" ")+1, match.indexOf("/")));
-                    int episodeNum = Integer.parseInt(match.substring(match.indexOf("/")+1, match.indexOf(":")));
-                    video.setSeasonNumber(seasonNum);
-                    video.setEpisodeNumber(episodeNum);
+                    
+                    String SxxExx = seasonEpisodeMatcher.group();
+                    Archiver.addTVMetaDataFromSxxExx(video, SxxExx);                    
                 }
                 else if(seasonEpisodeMatcher2.find())
                 {
@@ -216,7 +221,7 @@ public class PlayOnArchiver implements Constants
                 else if (absoluteEpisodeMatcher.find())
                 {
                     //catch something like this, which is really TV, but has no season number
-                    Config.log(INFO, "This appears to be a TV episode with no Season info. Will attempt TVDB lookup, and if it fails, default to season zero: "+ video.getFullPathEscaped());
+                    Logger.INFO( "This appears to be a TV episode with no Season info. Will attempt TVDB lookup, and if it fails, default to season zero: "+ video.getFullPathEscaped());
                     video.setType(TV_SHOW);
                     addNetflixTVSeriesAndTitle(video);//need series/title before lookup
                     if(!TVDB.lookupTVShow(video))
@@ -229,19 +234,18 @@ public class PlayOnArchiver implements Constants
                 }
                 else
                 {
-                    Config.log(DEBUG, "This netflix source does not match any known TV patterns. assuming it is a movie: "+ video.getFullPathEscaped());
+                    Logger.DEBUG( "This netflix source does not match any known TV patterns. assuming it is a movie: "+ video.getFullPathEscaped());
                     video.setType(MOVIE);
                 }
             }
-            catch(Exception x)
+            catch(Exception x)//Netflix/Instant Queue/H/Heroes/Heroes: Season 4/S04E01 - Orientation/S04E11 - Thanksgiving
             {
-                Config.log(WARNING, "Cannot parse season/episode numbers for netflix TV source: "+video.getFullPathEscaped(),x);
+                Logger.WARN( "Cannot parse season/episode numbers for netflix TV source: "+video.getFullPathEscaped(),x);
             }
         }
         
-        //netflix doesn't have music videos afaik
-        
-        Config.log(DEBUG, "Found PlayOn Netflix: "+ (video.isTvShow() ? "TV   ":"Movie")+": "+ video.getFullPathEscaped());
+        //netflix doesn't have music videos afaik        
+        Logger.DEBUG( "Found PlayOn Netflix: "+ (video.isTvShow() ? "TV   ":"Movie")+": "+ video.getFullPathEscaped());
 
         if(video.isTvShow())
             return addNetflixTVSeriesAndTitle(video);//parse netflix info from label/path
@@ -252,11 +256,11 @@ public class PlayOnArchiver implements Constants
         }
         else
         {
-            Config.log(WARNING, "Cannot Arvhive Playon Netflix video: Type of content cannot be auto-determined for: "+ video.getFullPathEscaped());
+            Logger.WARN( "Cannot Arvhive Playon Netflix video: Type of content cannot be auto-determined for: "+ video.getFullPathEscaped());
             return false;
         }
     }
-    private static boolean addNetflixTVSeriesAndTitle(XBMCFile video)
+    private static boolean addNetflixTVSeriesAndTitle(MyLibraryFile video)
     {
         
         try
@@ -265,7 +269,7 @@ public class PlayOnArchiver implements Constants
             String series = null, title = null;
             try//this method must be tried first (even though it matches less files); try using the filename spit at ":"... catches things line Bob the Builder: Call in the Crew
             {
-
+                
                 if(video.getFileLabel().contains(": "))//somethign like /Bob the Builder: Call in the Crew
                 {
                     String[] sa = video.getFileLabel().split(": ");
@@ -288,25 +292,47 @@ public class PlayOnArchiver implements Constants
             }
             catch(Exception x)//try secondary method, getting series as the parent folder and the file label being the title
             {
-                title = video.getFileLabel();
-
-                //try looking in the folder(s) above this show for the series
-                if(!Archiver.getSeriesFromParentFolder(video))
+                
+                series = null;                
+                //Netflix/Instant Queue/#/30 Days/30 Days: Season 3/S03E03 - Animal Rights
+                String[] folders = video.getFullPath().split(xbmc.util.Constants.DELIM);
+                if(folders.length > 1)
                 {
-                    //didn't work try secondary method
-                    String[] serieses = video.getFullPath().split(DELIM);
-                    series = serieses[serieses.length-2];//the folder above the file name
-                }
-                else
-                {
-                    series = video.getSeries();//series was  set in getSeriesFromParentFolder(). get it back here for further checks
+                    String parentFolder = folders[folders.length-2];//30 Days: Season 3
+                    if(tools.valid(parentFolder) && parentFolder.contains(": "))
+                    {
+                        series = parentFolder.substring(0, parentFolder.indexOf(": "));
+                    }
                 }
                 
-                if(series.contains(":"))//catches folders named like so: /Busytown Mysteries: Series 2/
-                        series = series.substring(0, series.indexOf(":"));
-
-                if(title.contains(":"))
-                    title = title.substring(title.indexOf(":")+1,title.length());
+                //try looking in the folder(s) above this show for the series
+                if(series == null)
+                {//couldn't find it the conventional way
+                    if(Archiver.getSeriesFromParentFolder(video))
+                    {
+                        series = video.getSeries();//series was  set in getSeriesFromParentFolder(). get it back here for further checks
+                    }
+                    else
+                    {                    
+                        //didn't work try secondary method
+                        String[] serieses = video.getFullPath().split(xbmc.util.Constants.DELIM);
+                        series = serieses[serieses.length-2];//the folder above the file name
+                        if(series.contains(":"))//catches folders named like so: /Busytown Mysteries: Series 2/
+                            series = series.substring(0, series.indexOf(":"));
+                    }
+                }
+                
+                
+                //get title (usually split from SxxExx by one of these)
+                title = video.getFileLabel();//S03E01 - Working in a Coal Mine
+                String[] splitters = new String[]{" - ", ":"};
+                for(String splitter : splitters)
+                {                
+                    if(title.contains(splitter)){
+                        title = title.substring(title.indexOf(splitter)+splitter.length(),title.length());
+                        break;
+                    }
+                }
             }
 
             if(!tools.valid(series)) throw new Exception("Series cannot be parsed...");
@@ -316,19 +342,19 @@ public class PlayOnArchiver implements Constants
             video.setTitle(title.trim());
 
             return true;//successfully got the series and title
-            //log(INFO, "Netflix episode meta data: series="+file.getSeries()+"; title="+file.getTitle()+", season="+file.getSeasonNumber()+", episode="+file.getEpidoseNumber());
+            //Logger.INFO( "Netflix episode meta data: series="+file.getSeries()+"; title="+file.getTitle()+", season="+file.getSeasonNumber()+", episode="+file.getEpidoseNumber());
         }
         catch(Exception x)
         {
             if(!tools.valid(video.getSeries()) || !tools.valid(video.getTitle()))
             {
-                Config.log(WARNING, "Cannot parse, and cannot lookup Netflix TV show (series="+video.getSeries()+", title="+video.getTitle()+")"+LINE_BRK+ video.getFullPathEscaped() +LINE_BRK+ x.getMessage());
+                Logger.WARN( "Cannot parse, and cannot lookup Netflix TV show (series="+video.getSeries()+", title="+video.getTitle()+")"+LINE_BRK+ video.getFullPathEscaped() +LINE_BRK+ x.getMessage());
                 return false;
             }
            else
             {
-                Config.log(INFO, "Cannot parse, but can lookup Netflix TV show (series="+video.getSeries()+", title="+video.getTitle()+")"+LINE_BRK + video.getFullPathEscaped() + LINE_BRK+ x.getMessage());
-                Config.log(INFO, "Attempting to find metadata on TheTVDB.com");
+                Logger.INFO( "Cannot parse, but can lookup Netflix TV show (series="+video.getSeries()+", title="+video.getTitle()+")"+LINE_BRK + video.getFullPathEscaped() + LINE_BRK+ x.getMessage());
+                Logger.INFO( "Attempting to find metadata on TheTVDB.com");
                 return TVDB.lookupTVShow(video);
             }
         }

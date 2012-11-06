@@ -5,6 +5,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static utilities.Constants.*;
+
 public class Exclude
 {
     public static void main(String[] xxx)
@@ -71,7 +73,7 @@ public class Exclude
                 }
                 else
                 {
-                     Config.log(Config.WARNING, "Unknown exclude type: \""+type+"\"");
+                     Logger.WARN( "Unknown exclude type: \""+type+"\"");
                 }
             }
         }

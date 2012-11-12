@@ -1,4 +1,6 @@
 package mylibrary;
+import xbmc.util.XbmcVideoLibraryFile;
+import xbmc.db.XBMCVideoDbInterface;
 import btv.logger.BTVLogLevel;
 import java.io.File;
 import java.net.URL;
@@ -13,9 +15,10 @@ import xbmc.jsonrpc.XbmcJsonRpcListener;
 import xbmc.util.XBMCFile;
 import xbmc.util.XbmcBox;
 
+import xbmc.util.XbmcMovie;
 import static utilities.Constants.*;
 import static xbmc.util.Constants.*;
-
+import static btv.tools.BTVTools.*;
 
 public class importer extends Config
 {
@@ -81,7 +84,7 @@ public class importer extends Config
     public importer()
     {
         super();//Load Config
-        Logger.NOTICE("Start "+PROGRAM_NAME+", v"+VERSION+", compatible with XBMC "+ XBMC_COMPATIBILITY);
+        
         
         if(!valid(desiredBaseDir))
             Logger.INFO( "Attempting to auto-determine base directory. If this fails, specify the base directory of this program as a command line parameter.");            
@@ -122,15 +125,39 @@ public class importer extends Config
     public boolean importVideos()
     {
                                 
-        //init JSON-RPC connections (sender and listener)
-        MyLibraryJsonRpc jsonRPCSender = new MyLibraryJsonRpc(XBMC_WEB_SERVER_URL);  //init only, does not attempt to connect yet                   
         
-        if(false)
+        
+        //\\DEBUG TESTING\\//
+        if(false && TESTING)
         {//debug testing json-rpc
-            //Config.LOGGING_LEVEL = DEBUG;
+            //Logger.getOptions().setLevelToLogAt(BTVLogLevel.DEBUG);
             //jsonRPCSender.sendGUINotification("'ello there", "Gov'na", 3000);                                    
             //jsonRPC.getLibraryMusic(true);
             //jsonRPC.getLibraryVideos(true);
+            //jsonRPCSender.getLibraryVideos();
+            //jsonRPCSender.getVideoFileDetails("smb://localhost/dropbox$/Movies/Sexual Intelligence.strm");
+            //jsonRPCSender.getMovieSets(true);
+            
+            XbmcMovie mov = jsonRPCSender.getMovieDetails(7);
+            Logger.INFO(mov.getSetId()+": "+ mov.getSetName());
+            Logger.INFO("Updated movieset ? "+jsonRPCSender.setMovieSet(7, ""));
+            mov = jsonRPCSender.getMovieDetails(7);
+            Logger.INFO(mov.getSetId()+": "+ mov.getSetName());
+            
+            //XbmcVideoLibraryFile f = jsonRPCSender.getVideoFileDetails("smb://localhost/dropbox$/Movies/The Gymnast.strm");
+            
+//            XbmcMovie mov = jsonRPCSender.getMovieDetails(7);
+//            Logger.INFO(Arrays.toString(mov.getTags()));
+//            Logger.INFO("Updated movie ? "+jsonRPCSender.setMovieTags(7, new String[0]));// new String[]{"tag1","tag2"}));
+//            mov = jsonRPCSender.getMovieDetails(7);
+//            Logger.INFO(Arrays.toString(mov.getTags()));
+            
+//            XbmcMovie mov = jsonRPCSender.getMovieDetails(7);
+//            Logger.INFO(mov.getTitle());
+//            Logger.INFO("Updated movie ? "+jsonRPCSender.setMovieTitle(7, "Craig'sList Joey"));
+//            mov = jsonRPCSender.getMovieDetails(7);
+//            Logger.INFO(mov.getTitle());
+            
             if(true) return false;//done testing
         }
         
@@ -455,7 +482,7 @@ public class importer extends Config
                     }while(!libraryScanFinished);
                     
                     
-                    setShortLogDesc("XBMC-"+DATABASE_TYPE);
+                    setShortLogDesc("XBMC-JSONRPC");
                     updateMetaData();
 
                     if(MANUAL_ARCHIVING_ENABLED)
@@ -496,7 +523,7 @@ public class importer extends Config
     public boolean manualArchiveIfNeeded(Map<File, MyLibraryFile> allVideosArchived, Map<String,XBMCFile> allVideoFilesInLibrary)
     {
         setShortLogDesc("ManualArchive");
-        if(allVideoFilesInLibrary.isEmpty())
+        if(allVideoFilesInLibrary.isEmpty() && !TESTING)
         {
             Logger.WARN( "No videos were found in XBMC's library. Assumining there is a problem and skipping manual archiving.");
             return false;
@@ -525,7 +552,7 @@ public class importer extends Config
             List<File> strmsNotInLibrary = new ArrayList();
             for(File strmFile : videosInFolder)
             {
-                String xbmcPathStrm = XBMCInterface.getFullXBMCPath(strmFile).toLowerCase();//key(path) is lowercase in: allVideoFilesInLibrary                
+                String xbmcPathStrm = XBMCVideoDbInterface.getFullXBMCPath(strmFile).toLowerCase();//key(path) is lowercase in: allVideoFilesInLibrary                
                 //if strm not found, mark it as missing
                 if(allVideoFilesInLibrary.get(xbmcPathStrm) == null)
                 {                    
@@ -545,6 +572,12 @@ public class importer extends Config
             Logger.NOTICE( "Of "+(videosInFolder.size())+" total "+videoType+" in dropbox, "
                     + "found " + numberNotInLibrary +" videos not yet in XBMC's library. "
                     + numberInLibrary +" files are in the library.");                       
+        }
+        
+        if(allVideosNotInLibrary.isEmpty())
+        {
+            Logger.NOTICE("No videos need to be manually archived (all are in XBMC's library already).");
+            return false;
         }
         
         Logger.NOTICE( "Will attempt manual archive for "+ allVideosNotInLibrary.size() +" video files that are not in XBMC's library.");
@@ -866,22 +899,19 @@ public class importer extends Config
     {
         
         //get the connection to MySQL or SQLite
-         XBMCInterface xbmc = new XBMCInterface(Config.DATABASE_TYPE, (Config.DATABASE_TYPE.equals(MYSQL) ? Config.XBMC_MYSQL_VIDEO_SCHEMA : Config.sqlLiteVideoDBPath));
+         
          try
          {                          
              Logger.INFO( "Will now update meta-data for videos in XBMC's library.");
              //update meta-data that's been queued
-             xbmc.addMetaDataFromQueue();
+             Config.jsonRPCSender.addMetaDataFromQueue();
 
          }
          catch(Exception x)
          {
              Logger.ERROR( "General exception while updating XBMC database: "+ x,x);
          }
-         finally
-         {
-             if(xbmc != null) xbmc.close();
-        }
+         
     }
 
     
@@ -904,7 +934,7 @@ public class importer extends Config
             
             String getIdSQL = "SELECT id FROM ArchivedFiles WHERE lower(dropbox_location) = ?";
             
-            int archivedFileId = archivedFilesDB.getSingleInt(getIdSQL, tools.params(path.toLowerCase()));
+            int archivedFileId = archivedFilesDB.getSingleInt(getIdSQL, path.toLowerCase());
             if(archivedFileId == SQL_ERROR)
             {
                 Logger.WARN( "Failed to determine archived id for file at: "+ path +". Will skip cleanup for this file. SQL used = "+ getIdSQL);
@@ -999,7 +1029,7 @@ public class importer extends Config
                         setShortLogDesc("Delete");
                         //delete from Database
                         String deleteSQL = "DELETE FROM ArchivedFiles WHERE dropbox_location = ?";//unique indx on dropbox_location
-                        int rowsDeleted = Config.archivedFilesDB.executeMultipleUpdate(deleteSQL,tools.params(path));
+                        int rowsDeleted = Config.archivedFilesDB.executeMultipleUpdate(deleteSQL,path);
                         boolean deletedFromDB = rowsDeleted >=0;///as long as it wasn't a SQL error, it's no longer in the database
                         if(!deletedFromDB)
                         {
@@ -1017,7 +1047,7 @@ public class importer extends Config
                             numberOfFilesDeleted++;                                                                                                                
 
                             //also remove any queued meta data changes that might still exist
-                            int numberDeleted = queuedChangesDB.executeMultipleUpdate("DELETE FROM QueuedChanges WHERE dropbox_location = ?", tools.params(path));
+                            int numberDeleted = queuedChangesDB.executeMultipleUpdate("DELETE FROM QueuedChanges WHERE dropbox_location = ?", path);
                             if(numberDeleted > 0)
                                 Logger.INFO( "Successfully removed "+ numberDeleted +" meta-data entry for the deleted source: "+ path);
                         }

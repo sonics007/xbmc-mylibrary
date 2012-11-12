@@ -15,6 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 
 public class MyLibraryFile extends xbmc.util.XBMCFile
 {
@@ -166,7 +167,7 @@ public class MyLibraryFile extends xbmc.util.XBMCFile
     }
     public boolean isTVDBIdOverridden()
     {
-        return tools.valid(getTVDBId());
+        return valid(getTVDBId());
     }
     public String getTVDBId()
     {
@@ -178,12 +179,12 @@ public class MyLibraryFile extends xbmc.util.XBMCFile
     }
     public boolean hasValidMetaData()
     {        
-        if(isMovie() && tools.valid(getTitle())) return true;
-        if(isTvShow() && tools.valid(getSeries()) && getSeasonNumber() > -1 && getEpisodeNumber() > -1) return true;//title not required
-        if(isMusicVideo() && tools.valid(getTitle()) && tools.valid(getArtist())) return true;
+        if(isMovie() && valid(getTitle())) return true;
+        if(isTvShow() && valid(getSeries()) && getSeasonNumber() > -1 && getEpisodeNumber() > -1) return true;//title not required
+        if(isMusicVideo() && valid(getTitle()) && valid(getArtist())) return true;
 
     	//AngryCamel - 20120817 1620 - Added generic
-        if(isGeneric() && tools.valid(getSeries()) && tools.valid(getTitle())) return true;
+        if(isGeneric() && valid(getSeries()) && valid(getTitle())) return true;
         
         return false;
     }
@@ -233,7 +234,7 @@ public class MyLibraryFile extends xbmc.util.XBMCFile
     	//AngryCamel - 20120817 1620
     	//   Check if there is a forced series in the subfolder config and apply it instead of whatever was passed.
     	try {
-                if(tools.valid(this.getSubfolder().getForceSeries()))
+                if(valid(this.getSubfolder().getForceSeries()))
                 {
                         this.series = stripExtras(this.getSubfolder().getForceSeries());
                 }
@@ -359,7 +360,7 @@ public class MyLibraryFile extends xbmc.util.XBMCFile
     
     public String stripExtras(String source)
     {
-        if(!tools.valid(source)) return source;        
+        if(!valid(source)) return source;        
         source = source.trim();
         
         String yearDigits = "[1,2][0-9]{3}";//match 1000's and 2000's

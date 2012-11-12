@@ -1,27 +1,30 @@
 
 package db;
 
+import btv.db.DbType;
+import btv.db.SingleStatementDatabase;
 import java.sql.*;
 import utilities.Config;
 
 import static utilities.Constants.*;
 
-public class SQLiteDB extends Database
+public class SQLiteDB extends SingleStatementDatabase
 {
     public SQLiteDB(String DBPath)
     {
-        super(SQL_LITE, DBPath);
+        super(DbType.SQLITE_NEW_DB, DBPath);
     }
     
     public synchronized boolean hasColumn(String tablename, String columnName)
     {
         String sql = "PRAGMA table_info("+tablename+")";
         boolean hasColumn = false;
-        Statement stmt = null;
+        PreparedStatement stmt = null;
         try
         {
-            stmt = conn.createStatement();            
-            ResultSet rs = stmt.executeQuery(sql);
+            stmt = getStatement(sql);//conn.createStatement();            
+            
+            ResultSet rs = stmt.executeQuery();
             while(rs.next())
             {
                 String nextColumnName = rs.getString("name");
@@ -41,8 +44,8 @@ public class SQLiteDB extends Database
         }
         finally
         {
-            if(stmt != null)
-                try{stmt.close();}catch(Exception ignored){}
+            //if(stmt != null) try{stmt.close();}catch(Exception ignored){}
+            closeStatement();
         }
     }
 }

@@ -8,7 +8,9 @@ import java.util.regex.*;
 
 import org.apache.commons.io.FileUtils;
 
+
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 
 public class Archiver implements Runnable
 {
@@ -528,16 +530,16 @@ public class Archiver implements Runnable
             //if the value has changed (and it's still in the queue), it will be updated
             
             //movie set
-            queueMetaDataChange(video, Constants.MOVIE_SET, video.getSubfolder().getMovieSet());
+            queueMetaDataChange(video, MetaDataType.MOVIE_SET, video.getSubfolder().getMovieSet());
             
             //movie tags
-            queueMetaDataChange(video, Constants.MOVIE_TAGS, video.getSubfolder().getMovieTagsAsString());
+            queueMetaDataChange(video, MetaDataType.MOVIE_TAGS, video.getSubfolder().getMovieTagsAsString());
 
             //prefix
-            queueMetaDataChange(video, Constants.PREFIX, video.getSubfolder().getPrefix());
+            queueMetaDataChange(video, MetaDataType.PREFIX, video.getSubfolder().getPrefix());
 
             //suffix
-            queueMetaDataChange(video, Constants.SUFFIX, video.getSubfolder().getSuffix());                
+            queueMetaDataChange(video, MetaDataType.SUFFIX, video.getSubfolder().getSuffix());                
             
             if(updating)
             {
@@ -597,7 +599,7 @@ public class Archiver implements Runnable
                 tvShowDir.mkdir();
             }
 
-            File seriesDir = new File(tvShowDir+SEP+tools.spacesToDots(tools.safeFileName(file.getSeries())));//safe name replaces spaces with periods
+            File seriesDir = new File(tvShowDir+SEP+tools.spacesToDots(safeFileName(file.getSeries())));//safe name replaces spaces with periods
             if(!seriesDir.isDirectory())
             {
                 Logger.DEBUG( "Creating series directory at " + seriesDir);
@@ -613,7 +615,7 @@ public class Archiver implements Runnable
 
             //final file location
             String baseDestination = seasonDir +SEP+file.getSeasonEpisodeNaming();
-            if(valid(file.getTitle())) baseDestination += " - "+ tools.safeFileName(file.getTitle());
+            if(valid(file.getTitle())) baseDestination += " - "+ safeFileName(file.getTitle());
 
             return baseDestination;
         }
@@ -630,7 +632,7 @@ public class Archiver implements Runnable
              boolean seperateFolderPerMovie = false;
              if(seperateFolderPerMovie)
              {
-                 movieDir = new File(dropbox + SEP+"Movies"+SEP+ tools.safeFileName(file.getTitle() + yearStr));
+                 movieDir = new File(dropbox + SEP+"Movies"+SEP+ safeFileName(file.getTitle() + yearStr));
                  if(!movieDir.isDirectory())
                 {
                     Logger.INFO( "Creating \""+file.getTitle()+"\" Movie directory at: " + movieDir);
@@ -638,7 +640,7 @@ public class Archiver implements Runnable
                 }
             }
 
-            String baseDestination = movieDir +SEP+ tools.safeFileName(file.getTitle()+yearStr);
+            String baseDestination = movieDir +SEP+ safeFileName(file.getTitle()+yearStr);
             return baseDestination;//remove illegal filename chars
         }
         else if(file.isMusicVideo())
@@ -649,7 +651,7 @@ public class Archiver implements Runnable
                 Logger.INFO( "Creating base Music Videos directory at: " + musicVideoDir);
                 musicVideoDir.mkdir();
             }
-            return musicVideoDir+SEP+ tools.safeFileName(file.getArtist() + " - "+ file.getTitle());
+            return musicVideoDir+SEP+ safeFileName(file.getArtist() + " - "+ file.getTitle());
         }
     	//AngryCamel - 20120817 1620 - Added generic
         else if(file.isGeneric())
@@ -662,7 +664,7 @@ public class Archiver implements Runnable
                 genericDir.mkdir();
             }
 
-            File seriesDir = new File(genericDir+SEP+tools.spacesToDots(tools.safeFileName(file.getSeries())));//safe name replaces spaces with periods
+            File seriesDir = new File(genericDir+SEP+tools.spacesToDots(safeFileName(file.getSeries())));//safe name replaces spaces with periods
             if(!seriesDir.isDirectory())
             {
                 Logger.DEBUG( "Creating series directory at " + seriesDir);
@@ -670,8 +672,8 @@ public class Archiver implements Runnable
             }
 
             //final file location
-            String baseDestination = seriesDir +SEP+ tools.safeFileName(file.getSeries());
-            if(valid(file.getTitle())) baseDestination += " - "+ tools.safeFileName(file.getTitle());
+            String baseDestination = seriesDir +SEP+ safeFileName(file.getSeries());
+            if(valid(file.getTitle())) baseDestination += " - "+ safeFileName(file.getTitle());
 
             return baseDestination;
         }
@@ -682,9 +684,9 @@ public class Archiver implements Runnable
         }
     }
    
-    public void queueMetaDataChange(MyLibraryFile file, String typeOfMetaData, String value)
+    public void queueMetaDataChange(MyLibraryFile file, MetaDataType typeOfMetaData, String value)
     {
-        if(!file.isMovie() && (typeOfMetaData.equals(MOVIE_SET) || typeOfMetaData.equals(MOVIE_TAGS)))
+        if(!file.isMovie() && (typeOfMetaData.isForMovieOnly()))
         {
             //Logger.DEBUG( "Movie Set/Tags not allowed for non-movie. Skipping: "+file.getFileLabel());
             return;
@@ -834,7 +836,7 @@ public class Archiver implements Runnable
      public boolean addTVMetaData(MyLibraryFile video)
     {
         String sxxExx = findSeasonEpisodeNumbers(video);
-        if(tools.valid(sxxExx))
+        if(valid(sxxExx))
         {
             Logger.DEBUG( "Found SxxExx pattern ("+sxxExx+"), attempting to parse it.");
             return addTVMetaDataFromSxxExx(video, sxxExx);//dont need to send in sxxexx string because they have been set in the findSeasonEpisodeNumbers method
@@ -1047,7 +1049,7 @@ public class Archiver implements Runnable
         skipFolders.add("[0-9]+");//new format used by playon specified season number as single integer folder
         skipFolders.add("(Next|Previous) (Page|Section) \\(.+\\)");//HuluBlueCop/Subscriptions/The Office (HD)/Episodes (174)/Next Page (101-174 of 174)/6x12 - Secret Santa (HD)
         String series = getParentFolderWithSkips(video.getFullPath().split(xbmc.util.Constants.DELIM),skipFolders);
-        if(tools.valid(series))
+        if(valid(series))
         {
             video.setSeries(series);
             return true;
@@ -1106,10 +1108,5 @@ public class Archiver implements Runnable
         }
         Logger.DEBUG( "New season zero episode number for " + seasonZeroFolder +" is "+ maxEpNum);
         return maxEpNum;
-    }        
-  
-    public static boolean valid(String s)
-    {
-        return tools.valid(s);
-    }
+    }              
 }

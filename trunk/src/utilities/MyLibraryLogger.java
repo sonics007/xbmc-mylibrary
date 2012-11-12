@@ -23,8 +23,9 @@ import btv.logger.BTVLoggerOptions;
 import btv.tools.BTVTools;
 import java.io.File;
 import org.apache.commons.io.FileUtils;
-import static utilities.Constants.*;
 
+import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 /**
  * 
  * @author Brady Vidovic
@@ -43,7 +44,7 @@ public class MyLibraryLogger extends BTVLogger{
         if(!BTVTools.valid(Config.shortLogDesc))
             Config.shortLogDesc = " ";
                                                                 
-        Config.shortLogDesc = tools.tfl(Config.shortLogDesc, Config.SHORT_DESC_LENGTH);
+        Config.shortLogDesc = tfl(Config.shortLogDesc, Config.SHORT_DESC_LENGTH);
         message = Config.shortLogDesc +" "+ message;
         
         //obscure tvdb id

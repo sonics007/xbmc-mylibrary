@@ -6,6 +6,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.regex.*;
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 
 public class PlayOnArchiver
 {
@@ -122,7 +123,7 @@ public class PlayOnArchiver
         else if(video.isMovie())
         {
             video.setTitle(video.getFileLabel());
-            success = tools.valid(video.getTitle());
+            success = valid(video.getTitle());
         }
         else//do hulu/cbs have music videos?
         {
@@ -161,14 +162,14 @@ public class PlayOnArchiver
 
             }
 
-            if(!tools.valid(video.getSeries()))
+            if(!valid(video.getSeries()))
             {
                 Logger.WARN( "Series cannot be found from Hulu/CBS path: "+ video.getFullPathEscaped());
                 return false;
             }
 
             //get the title (not required for scraping
-            if(!tools.valid(video.getTitle()))
+            if(!valid(video.getTitle()))
             {
                 Logger.INFO( "Title cannot be parsed for this video, it will be set to the file name: \""+ video.getFileLabel()+"\"");
                 video.setTitle(video.getFileLabel());
@@ -252,7 +253,7 @@ public class PlayOnArchiver
         else if(video.isMovie())
         {
             video.setTitle(video.getFileLabel());//just use the label as the title
-            return tools.valid(video.getFileLabel());
+            return valid(video.getFileLabel());
         }
         else
         {
@@ -281,7 +282,7 @@ public class PlayOnArchiver
                     if(!is24)//exclude 24 becuase the series should be an integer
                     {
                         series = "24";
-                        if(tools.isInt(series))//this is actually the episode number, not the series.
+                        if(isInt(series))//this is actually the episode number, not the series.
                         {
                             series = null;
                             throw new Exception("Incorrect series (Integer found as series name)");
@@ -299,7 +300,7 @@ public class PlayOnArchiver
                 if(folders.length > 1)
                 {
                     String parentFolder = folders[folders.length-2];//30 Days: Season 3
-                    if(tools.valid(parentFolder) && parentFolder.contains(": "))
+                    if(valid(parentFolder) && parentFolder.contains(": "))
                     {
                         series = parentFolder.substring(0, parentFolder.indexOf(": "));
                     }
@@ -335,10 +336,10 @@ public class PlayOnArchiver
                 }
             }
 
-            if(!tools.valid(series)) throw new Exception("Series cannot be parsed...");
+            if(!valid(series)) throw new Exception("Series cannot be parsed...");
             video.setSeries(series.trim());
 
-            if(!tools.valid(title)) throw new Exception("Title cannot be parsed...");
+            if(!valid(title)) throw new Exception("Title cannot be parsed...");
             video.setTitle(title.trim());
 
             return true;//successfully got the series and title
@@ -346,7 +347,7 @@ public class PlayOnArchiver
         }
         catch(Exception x)
         {
-            if(!tools.valid(video.getSeries()) || !tools.valid(video.getTitle()))
+            if(!valid(video.getSeries()) || !valid(video.getTitle()))
             {
                 Logger.WARN( "Cannot parse, and cannot lookup Netflix TV show (series="+video.getSeries()+", title="+video.getTitle()+")"+LINE_BRK+ video.getFullPathEscaped() +LINE_BRK+ x.getMessage());
                 return false;

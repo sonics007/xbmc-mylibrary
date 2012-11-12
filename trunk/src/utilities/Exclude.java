@@ -6,6 +6,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 
 public class Exclude
 {
@@ -48,7 +49,7 @@ public class Exclude
         for(Map.Entry<String,List<String>> entry : excludeFilters.entrySet())
         {
             String type = entry.getKey();
-            if(!tools.valid(type)) continue;
+            if(!valid(type)) continue;
             List<String> excludeStrings = entry.getValue();
             for(String excludeString : excludeStrings)
             {

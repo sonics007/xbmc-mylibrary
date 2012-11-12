@@ -10,7 +10,7 @@ import org.apache.commons.io.FileUtils;
 import org.jdom.Document;
 import org.jdom.Element;
 import static utilities.Constants.*;
-
+import static btv.tools.BTVTools.*;
 public class MusicVideoScraper
 {
     public static void main(String[] args)
@@ -134,7 +134,7 @@ public class MusicVideoScraper
                 String year = video.getAttributeValue("copyrightYear");
                 String strSeconds = video.getAttributeValue("duration");
                 String runtime = null;
-                if(tools.valid(strSeconds))
+                if(valid(strSeconds))
                 {
                     try
                     {
@@ -165,14 +165,14 @@ public class MusicVideoScraper
                 List<String> lines = new ArrayList<String>();
                 lines.add("<musicvideo>");
                     //required:
-                    if(tools.valid(title)) lines.add("<title>"+title+"</title>");
+                    if(valid(title)) lines.add("<title>"+title+"</title>");
                     else
                     {
                         Logger.WARN("Title is not available, cannot continue.");
                         fail++;
                         return false;
                     }
-                    if(tools.valid(artist)) lines.add("<artist>"+artist+"</artist>");
+                    if(valid(artist)) lines.add("<artist>"+artist+"</artist>");
                     else
                     {
                         Logger.WARN("artist is not available, cannot continue.");
@@ -181,10 +181,10 @@ public class MusicVideoScraper
                     }
 
                     //optional:
-                    if(tools.valid(genre)) lines.add("<genre>"+genre+"</genre>");
-                    if(tools.valid(runtime)) lines.add("<runtime>"+runtime+"</runtime>");
-                    if(tools.valid(year)) lines.add("<year>"+year+"</year>");
-                    if(tools.valid(studio)) lines.add("<studio>"+studio+"</studio>");
+                    if(valid(genre)) lines.add("<genre>"+genre+"</genre>");
+                    if(valid(runtime)) lines.add("<runtime>"+runtime+"</runtime>");
+                    if(valid(year)) lines.add("<year>"+year+"</year>");
+                    if(valid(studio)) lines.add("<studio>"+studio+"</studio>");
                 lines.add("</musicvideo>");
 
                 boolean written = tools.writeToFile(nfoFile, lines, true);
@@ -220,7 +220,7 @@ public class MusicVideoScraper
                             }
                         }
 
-                        if(tools.valid(imageUrl))
+                        if(valid(imageUrl))
                         {
                             boolean saved = saveImage(imageUrl, imageFile);
                             if(saved)Logger.INFO( "Saved image to: "+ imageFile +" from "+ imageUrl);
@@ -317,7 +317,7 @@ public class MusicVideoScraper
                     + "WHERE query_url = ? "
                     + "AND api_name = ?";
             
-            Long lastqueried = Config.scraperDB.getSingleTimestamp(checkSQl,tools.params(url,API_NAME));
+            Long lastqueried = Config.scraperDB.getSingleTimestamp(checkSQl,url,API_NAME);
             
             
             if(lastqueried != null)
@@ -381,7 +381,7 @@ public class MusicVideoScraper
 
     public static String cleanMusicVideoLabel(String source)
     {
-        if(!tools.valid(source)) return "";
+        if(!valid(source)) return "";
 
         source = source.replace("&#39;", "'");//catch single quote replacement
         

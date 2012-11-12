@@ -1,22 +1,21 @@
 package utilities;
 
+import btv.db.DbType;
 import btv.logger.BTVLogLevel;
 import db.ArchivedFilesDB;
-import db.Database;
 import db.QueuedChangesDB;
 import db.ScraperDB;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
-import java.net.ServerSocket;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import org.apache.commons.io.FileUtils;
 import org.jdom.Document;
 import org.jdom.Element;
 import org.jdom.input.SAXBuilder;
 
+import xbmcdb.db.tools.XBMCDbConfig;
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
+
 public class Config extends Constants
 {
     public static boolean RESTART_XBMC = false;                      
@@ -58,50 +57,37 @@ public class Config extends Constants
     //JSON-RPC config
     public static int JSON_RPC_RAW_PORT = 9090;
     public static String XBMC_WEB_SERVER_URL = "[unknown]";                
-
+    public static MyLibraryJsonRpc jsonRPCSender;
+    
+    
     //IP Change
     public static boolean IP_CHANGE_ENABLED = false;
     public static List<IPChange> IP_CHANGES = new ArrayList<IPChange>();
     
 
-    //XBMC MySQL    
-    public static String XBMC_MYSQL_SERVER =null;
-    public static String XBMC_MYSQL_UN =null;
-    public static String XBMC_MYSQL_PW =null;
-    public static String XBMC_MYSQL_VIDEO_SCHEMA =null;
-    public static String XBMC_MYSQL_MUSIC_SCHEMA =null;
-    public static int XBMC_MYSQL_PORT = 3306;
-
-    //ThubnailCleaner variables:
-    public static String DATABASE_TYPE = null;
-    public static String sqlLiteVideoDBPath = "C:\\Users\\[USERNAME]\\AppData\\Roaming\\XBMC\\userdata\\Database\\MyVideos34.db";
-    public static String sqlLiteMusicDBPath = "C:\\Users\\[USERNAME]\\AppData\\Roaming\\XBMC\\userdata\\Database\\MyMusic7.db";
-    public static String sqlLiteTexturesDBPath = "C:\\Users\\[USERNAME]\\AppData\\Roaming\\XBMC\\userdata\\Database\\Textures.db";
-    public static double TEXTURE_LAST_USED_DAYS_THRESHOLD = 7.0;
-    public static String TEXTURE_AND_OR_FOR_THRESHOLD = "and";
-    public static int TEXTURE_USE_COUNT_THRESHOLD = 2;
-    public static boolean CONFIRM_PATHS_EXIST = true;//todo: add to config
-    public static boolean CLEAN_TEXTURES = false;
-
-    public static int SPOT_CHECK_MAX_IMAGES = 150;
-    public static String SPOT_CHECK_DIR;
-    public static boolean SIMULATION;
+    //XBMC MySQL    Sqlite        
+    private static String XBMC_MYSQL_SERVER =null;
+    private static String XBMC_MYSQL_UN =null;
+    private static String XBMC_MYSQL_PW =null;
+    private static String XBMC_MYSQL_VIDEO_SCHEMA =null;    
+    private static int XBMC_MYSQL_PORT = 3306;
+    private static String DATABASE_TYPE = null;
+    private static String sqlLiteVideoDBPath = "C:\\Users\\[USERNAME]\\AppData\\Roaming\\XBMC\\userdata\\Database\\MyVideos.db";            
+    
     
     //sdf's
     public static final SimpleDateFormat tvdbFirstAiredSDF = new SimpleDateFormat("yyyy-MM-dd");//for lookup on thetvdb based on first aired date
     public static final SimpleDateFormat log_sdf = new SimpleDateFormat("MM/dd/yyyy hh:mm:ss a");//for logging    
 
-    final boolean IS_MY_LIBRARY=true;//legacy from thumbcleaner sharing
+    
     String logFileNameNoExt;
     public Config()
     {
         super(PROGRAM_NAME+".properties", LOGGING_LEVEL, SINGLE_INSTANCE, SINGLE_INSTANCE_PORT, -1);                                
                                 
         setShortLogDesc("Init...");        
-
-        
-        
-                
+        Logger.NOTICE("Start "+PROGRAM_NAME+", v"+VERSION+", compatible with XBMC "+ XBMC_COMPATIBILITY);
+                                
 
          //populate charactes that we do not allow in file names
         char[] specialChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '*', '~', '�'};
@@ -110,15 +96,8 @@ public class Config extends Constants
         char[] uncommonChars = {'<', '>', ':', '"', '/', '\\', '|', '?', '*', '#', '$', '%', '^', '*', '!', '~','\'', '�', '=', '[' ,']', '(', ')', ';', '\\' ,',', '_'};
         for(char c : uncommonChars) UNCOMMON_CHARS.put(new Integer((int) c), "illegal");
 
-        
-        /*
-         * Only needed for MyLibrary
-         */
-        if(IS_MY_LIBRARY)
-        {
-            if(!initializeSQLiteDbs()) return;                           
-        }
-       
+                
+        if(!initializeSQLiteDbs()) return; //need these!
 
     }
 
@@ -186,488 +165,498 @@ public class Config extends Constants
         //JSON-RPC
         Map<String,String> jsonRPCChildren = getChildren(root.getChild("JSONRPC"));
         XBMC_WEB_SERVER_URL = jsonRPCChildren.get("xbmcwebserver");        
-        JSON_RPC_RAW_PORT = tools.isInt(jsonRPCChildren.get("announcementport")) ? Integer.parseInt(jsonRPCChildren.get("announcementport")) : JSON_RPC_RAW_PORT;        
+        JSON_RPC_RAW_PORT = isInt(jsonRPCChildren.get("announcementport")) ? Integer.parseInt(jsonRPCChildren.get("announcementport")) : JSON_RPC_RAW_PORT;        
         Logger.INFO( "JSON-RPC config: XBMC Webserver URL="+XBMC_WEB_SERVER_URL);
         Logger.INFO( "JSON-RPC AnnouncementPort = "+JSON_RPC_RAW_PORT);        
         
+        //init JSON-RPC connection
+        jsonRPCSender = new MyLibraryJsonRpc(XBMC_WEB_SERVER_URL);  //init only, does not attempt to connect yet                   
+                
         
-        //Database (MySQL or SQLite)
-        Element databaseElem = root.getChild("XBMCDatabase");
-        if(databaseElem != null)
+        //11/12/2012 - bradvido - Database connection no longer needed. Everything has been converted to use JSON-RPC!
+//        //Database (MySQL or SQLite)
+//        XBMCDbConfig dbConfig = new XBMCDbConfig();
+//        Element databaseElem = root.getChild("XBMCDatabase");
+//        if(databaseElem != null)
+//        {
+//            Element sqlite = databaseElem.getChild("SQLite");
+//            if(sqlite != null)
+//            {
+//                boolean enabled = "true".equalsIgnoreCase(sqlite.getAttributeValue("enabled"));
+//                if(enabled)
+//                {
+//                    DATABASE_TYPE = SQL_LITE;
+//                    dbConfig.setDB_TYPE(DbType.SQLITE);
+//                    
+//                    sqlLiteVideoDBPath = sqlite.getChildText("VideoDBPath");
+//                    dbConfig.setSQLITE_PATH(sqlLiteVideoDBPath);
+//                    
+//                    Logger.INFO( "XBMC SQLite VideoDBPath = "+ sqlLiteVideoDBPath);
+//                    if(!new File(sqlLiteVideoDBPath).exists())
+//                    {
+//                        Logger.ERROR( "No file exists at XBMC SQLite path for video db. Cannot continue. Path = "+ sqlLiteVideoDBPath);
+//                        return false;
+//                    }
+//                                    
+//                }
+//                else
+//                {
+//                    Logger.INFO( "SQLite is disabled.");
+//                }
+//            }
+//            else
+//            {
+//                Logger.WARN( "<SQLite> element not found. Will look for <MySQL>...");
+//            }
+//
+//
+//            //XBMCMySQLServer
+//             //load XBMC MySQL Server info
+//            if(SQL_LITE.equals(DATABASE_TYPE))
+//            {
+//                Logger.INFO( "Skipping MySQL config because SQLite is already enabled.");
+//            }
+//            else
+//            {
+//                Element xbmcMySQL = databaseElem.getChild("MySQL");
+//                Map<String,String> xbmcMySQLChildren = getChildren(xbmcMySQL);
+//                boolean mySQLEnabled = false;
+//                if(xbmcMySQL != null)
+//                {
+//                    mySQLEnabled = "true".equalsIgnoreCase(xbmcMySQL.getAttributeValue("enabled"));
+//                    XBMC_MYSQL_SERVER = xbmcMySQLChildren.get("host");
+//                    dbConfig.setMYQSL_HOST(XBMC_MYSQL_SERVER);
+//                    
+//                    XBMC_MYSQL_VIDEO_SCHEMA = xbmcMySQLChildren.get("videoschema");
+//                    dbConfig.setMYSQL_SCHEMA(XBMC_MYSQL_VIDEO_SCHEMA);
+//                    
+//                    XBMC_MYSQL_UN = xbmcMySQLChildren.get("username");
+//                    dbConfig.setMYSQL_USERNAME(XBMC_MYSQL_UN);
+//                    
+//                    XBMC_MYSQL_PW = xbmcMySQLChildren.get("password");
+//                    dbConfig.setMYSQL_PASSWORD(XBMC_MYSQL_PW);
+//                    
+//                    XBMC_MYSQL_PORT = isInt(xbmcMySQLChildren.get("port")) ? Integer.parseInt(xbmcMySQLChildren.get("port")): 3306;
+//                    dbConfig.setMYSQL_PORT(XBMC_MYSQL_PORT);
+//
+//                    
+//                    Logger.log(mySQLEnabled ? BTVLogLevel.INFO : BTVLogLevel.DEBUG,"XBMCMySQL config: enabled="+mySQLEnabled+", "+"XBMCServerName="+XBMC_MYSQL_SERVER+", XBMCVideoSchema="+XBMC_MYSQL_VIDEO_SCHEMA+", "
+//                        + "MySQLUserName="+XBMC_MYSQL_UN+", MySQLPassword="+XBMC_MYSQL_PW+", MySQLPort="+XBMC_MYSQL_PORT,null);
+//
+//                    //test the connections
+//                    if(mySQLEnabled)
+//                    {
+//                        DATABASE_TYPE = MYSQL;
+//                        dbConfig.setDB_TYPE(DbType.MYSQL);                                                
+//                        
+//                    }
+//                }
+//                else Logger.WARN( "<XBMCMySQLServer> element not found in config file.");
+//            }//end if SQLite is not enabled
+//
+//            if(DATABASE_TYPE == null)
+//            {
+//                Logger.ERROR( "Neither SQLite nor MySQL are enabled in config. Cannot continue.");
+//                return false;
+//            }
+//            
+//            
+//            //init database (connects automatically)            
+//
+//            
+//            //init the db interface
+//            xbmcDb = new MyLibraryXBMCDBInterface(dbConfig);
+//        
+//            //test conection
+//            if(!xbmcDb.isConnected())
+//            {
+//                Logger.ERROR("Failed to connect to XMBC Video Database. Cannot continue!");
+//                return false;
+//            }
+//            
+//        }//end database elem is not null
+//        else
+//        {
+//            Logger.ERROR( "No <XBMCDatabase> element was found in config. Cannot continue.");
+//            return false;
+//        }        
+        
+    
+        //Restart XBMC before scan
+        Element restartXBMCElem = root.getChild("XBMCRestart");
+        if(restartXBMCElem == null)Logger.WARN( "No <XBMCRestart> element found, defaulting to restart="+RESTART_XBMC);
+        else RESTART_XBMC = "true".equalsIgnoreCase(restartXBMCElem.getAttributeValue("enabled"));
+        Logger.DEBUG( "XBMCRestart enabled = "+ RESTART_XBMC);                                                
+
+
+        //IP Change
+        Element ipChangeElem = root.getChild("IPChange");
+        if(ipChangeElem != null)            
+            IP_CHANGE_ENABLED = "true".equalsIgnoreCase(ipChangeElem.getAttributeValue("enabled"));
+
+        Logger.DEBUG( "IP Change is " + (IP_CHANGE_ENABLED ? "enabled for "+ IP_CHANGES.size()+" changes.":"disabled"));
+        if(IP_CHANGE_ENABLED)
         {
-            Element sqlite = databaseElem.getChild("SQLite");
-            if(sqlite != null)
+            List<Element> changes = ipChangeElem.getChildren("change");
+            for(Element change : changes)
             {
-                boolean enabled = "true".equalsIgnoreCase(sqlite.getAttributeValue("enabled"));
-                if(enabled)
+                String from = change.getAttributeValue("from");
+                String to = change.getAttributeValue("to");
+                if(!valid(from))
                 {
-                    DATABASE_TYPE = SQL_LITE;
-                    
-                    sqlLiteVideoDBPath = sqlite.getChildText("VideoDBPath");
-                    Logger.INFO( "XBMC SQLite VideoDBPath = "+ sqlLiteVideoDBPath);
-                    if(!new File(sqlLiteVideoDBPath).exists())
-                    {
-                        Logger.ERROR( "No file exists at XBMC SQLite path for video db. Cannot continue. Path = "+ sqlLiteVideoDBPath);
-                        return false;
-                    }
-                                    
+                    Logger.WARN( "Skipping IPChange, from is not valid: \""+from+"\"");
+                    continue;
                 }
-                else
+                if(!valid(to))
                 {
-                    Logger.INFO( "SQLite is disabled.");
+                    Logger.WARN( "Skipping IPChange, to is not valid: \""+to+"\"");
+                    continue;
                 }
+                IP_CHANGES.add(new IPChange(from, to));
+                Logger.DEBUG( "Added IPChange from: "+from +" to "+ to);
             }
-            else
-            {
-                Logger.WARN( "<SQLite> element not found. Will look for <MySQL>...");
-            }
+        }
 
 
-            //XBMCMySQLServer
-             //load XBMC MySQL Server info
-            if(SQL_LITE.equals(DATABASE_TYPE))
-            {
-                Logger.INFO( "Skipping MySQL config because SQLite is already enabled.");
-            }
-            else
-            {
-                Element xbmcMySQL = databaseElem.getChild("MySQL");
-                Map<String,String> xbmcMySQLChildren = getChildren(xbmcMySQL);
-                boolean mySQLEnabled = false;
-                if(xbmcMySQL != null)
-                {
-                    mySQLEnabled = "true".equalsIgnoreCase(xbmcMySQL.getAttributeValue("enabled"));
-                    XBMC_MYSQL_SERVER = xbmcMySQLChildren.get("host");
-                    XBMC_MYSQL_VIDEO_SCHEMA = xbmcMySQLChildren.get("videoschema");
-                    if(valid(xbmcMySQLChildren.get("musicschema"))) XBMC_MYSQL_MUSIC_SCHEMA = xbmcMySQLChildren.get("musicschema");                    
-                    XBMC_MYSQL_UN = xbmcMySQLChildren.get("username");
-                    XBMC_MYSQL_PW = xbmcMySQLChildren.get("password");
-                    XBMC_MYSQL_PORT = tools.isInt(xbmcMySQLChildren.get("port")) ? Integer.parseInt(xbmcMySQLChildren.get("port")): 3306;
 
-
-                    String ifThumbCleaner = "";                    
-                    Logger.log(mySQLEnabled ? BTVLogLevel.INFO : BTVLogLevel.DEBUG,"XBMCMySQL config: enabled="+mySQLEnabled+", "+"XBMCServerName="+XBMC_MYSQL_SERVER+", XBMCVideoSchema="+XBMC_MYSQL_VIDEO_SCHEMA+", "
-                        + "MySQLUserName="+XBMC_MYSQL_UN+", MySQLPassword="+XBMC_MYSQL_PW+", MySQLPort="+XBMC_MYSQL_PORT+ifThumbCleaner,null);
-
-                    //test the connections
-                    if(mySQLEnabled)
-                    {
-                        DATABASE_TYPE = MYSQL;
-                        Map<String, String> schemas = new LinkedHashMap<String,String>();
-                        schemas.put("video", XBMC_MYSQL_VIDEO_SCHEMA);
-                        schemas.put("music", XBMC_MYSQL_MUSIC_SCHEMA);
-                        for(Map.Entry<String,String> entry : schemas.entrySet())
-                        {
-                            String schemaType = entry.getKey();
-                            if(schemaType.equals("music") && IS_MY_LIBRARY) continue;//MyLibrary doesnt use music schema, no need to test
-                            String schema = entry.getValue();
-                            Logger.INFO( "Testing connection to XBMC SQL Database "+schemaType+" schema: "+schema);
-                            XBMCInterface xbmcMySQLConnection = new XBMCInterface(MYSQL, schema);
-                            Logger.INFO( "Connected successfully = " + xbmcMySQLConnection.isConnected());
-                            if(!xbmcMySQLConnection.isConnected())
-                            {                                                                
-                                Logger.ERROR( "Failed to connect to XBMC MySQL Server, "+schemaType+" schema named " + schema+"; Cannot continue.");
-                                return false;
-                            }
-                            if(xbmcMySQLConnection != null) xbmcMySQLConnection.close();
-                        }//end looping thru schemas
-                    }
-                }
-                else Logger.WARN( "<XBMCMySQLServer> element not found in config file.");
-            }//end if SQLite is not enabled
-
-            if(DATABASE_TYPE == null)
-            {
-                Logger.ERROR( "Neither SQLite nor MySQL are enabled in config. Cannot continue.");
-                return false;
-            }
-        }//end database elem is not null
-        else
+        //Dropbox
+        Element dropboxElem = root.getChild("Dropbox");
+        if(dropboxElem == null)
         {
-            Logger.ERROR( "No <XBMCDatabase> element was found in config. Cannot continue.");
+            Logger.ERROR( "<Dropbox> config not found. Cannot continue.");
             return false;
         }
 
-        //specific config for MyLibrary
-        if(IS_MY_LIBRARY)
+        String streamingDropbox = dropboxElem.getChildText("streaming");
+        if(!valid(streamingDropbox))
         {
-            //Restart XBMC before scan
-            Element restartXBMCElem = root.getChild("XBMCRestart");
-            if(restartXBMCElem == null)Logger.WARN( "No <XBMCRestart> element found, defaulting to restart="+RESTART_XBMC);
-            else RESTART_XBMC = "true".equalsIgnoreCase(restartXBMCElem.getAttributeValue("enabled"));
-            Logger.DEBUG( "XBMCRestart enabled = "+ RESTART_XBMC);                                                
-            
+            Logger.ERROR( "Dropbox was not found in Config.xml. Please verify your <streaming> element is filled in. Cannot contine until this is fixed.");
+            return false;
+        }
+        if(streamingDropbox.endsWith("/") || streamingDropbox.endsWith("\\")) streamingDropbox = streamingDropbox.substring(0, streamingDropbox.length()-1);//trim trailing slash
+        DROPBOX = streamingDropbox;
+        //create the dropbox if it doesnt exist
+        File db = new File(DROPBOX);
+        if(!db.exists())db.mkdir();
+        Logger.DEBUG( "Streaming Dropbox = "+ DROPBOX);
 
-            //IP Change
-            Element ipChangeElem = root.getChild("IPChange");
-            if(ipChangeElem != null)            
-                IP_CHANGE_ENABLED = "true".equalsIgnoreCase(ipChangeElem.getAttributeValue("enabled"));
-            
-            Logger.DEBUG( "IP Change is " + (IP_CHANGE_ENABLED ? "enabled for "+ IP_CHANGES.size()+" changes.":"disabled"));
-            if(IP_CHANGE_ENABLED)
-            {
-                List<Element> changes = ipChangeElem.getChildren("change");
-                for(Element change : changes)
-                {
-                    String from = change.getAttributeValue("from");
-                    String to = change.getAttributeValue("to");
-                    if(!valid(from))
-                    {
-                        Logger.WARN( "Skipping IPChange, from is not valid: \""+from+"\"");
-                        continue;
-                    }
-                    if(!valid(to))
-                    {
-                        Logger.WARN( "Skipping IPChange, to is not valid: \""+to+"\"");
-                        continue;
-                    }
-                    IP_CHANGES.add(new IPChange(from, to));
-                    Logger.DEBUG( "Added IPChange from: "+from +" to "+ to);
-                }
-            }
-            
+        //Linux Samba Prefix - Used to support meta-data alteration on Linux systems
+        String linuxSambaPrefix = dropboxElem.getChildText("LinuxSambaPrefix");
+        if (valid(linuxSambaPrefix))
+        {
+            if(linuxSambaPrefix.endsWith("/") || linuxSambaPrefix.endsWith("\\")) linuxSambaPrefix = linuxSambaPrefix.substring(0, linuxSambaPrefix.length()-1);//trim trailing slash
+            LINUX_SAMBA_PREFIX = linuxSambaPrefix;
+            Logger.DEBUG( "Using Linux Samba Prefix = "+ LINUX_SAMBA_PREFIX);
+        }
 
-            
-            //Dropbox
-            Element dropboxElem = root.getChild("Dropbox");
-            if(dropboxElem == null)
-            {
-                Logger.ERROR( "<Dropbox> config not found. Cannot continue.");
-                return false;
-            }
+        String downloadedDropbox = dropboxElem.getChildText("downloaded");
+        if(!valid(downloadedDropbox))
+        {
+            //this is expected now that downloading support has been removed
+            //Logger.ERROR( "Downloaded Dropbox was not found in Config.xml. Please verify your <downloaded> element is filled in. Cannot contine until this is fixed.");
+            //return false;
+        }
+        else
+        {
+            Logger.WARN( "Downloading is not longer supported for this program. Nothing will be downloaded to: "+ downloadedDropbox);                
+        }
 
-            String streamingDropbox = dropboxElem.getChildText("streaming");
-            if(!valid(streamingDropbox))
-            {
-                Logger.ERROR( "Dropbox was not found in Config.xml. Please verify your <streaming> element is filled in. Cannot contine until this is fixed.");
-                return false;
-            }
-            if(streamingDropbox.endsWith("/") || streamingDropbox.endsWith("\\")) streamingDropbox = streamingDropbox.substring(0, streamingDropbox.length()-1);//trim trailing slash
-            DROPBOX = streamingDropbox;
-            //create the dropbox if it doesnt exist
-            File db = new File(DROPBOX);
-            if(!db.exists())db.mkdir();
-            Logger.DEBUG( "Streaming Dropbox = "+ DROPBOX);
-            
-            //Linux Samba Prefix - Used to support meta-data alteration on Linux systems
-            String linuxSambaPrefix = dropboxElem.getChildText("LinuxSambaPrefix");
-            if (valid(linuxSambaPrefix))
-            {
-                if(linuxSambaPrefix.endsWith("/") || linuxSambaPrefix.endsWith("\\")) linuxSambaPrefix = linuxSambaPrefix.substring(0, linuxSambaPrefix.length()-1);//trim trailing slash
-                LINUX_SAMBA_PREFIX = linuxSambaPrefix;
-                Logger.DEBUG( "Using Linux Samba Prefix = "+ LINUX_SAMBA_PREFIX);
-            }
-            
-            String downloadedDropbox = dropboxElem.getChildText("downloaded");
-            if(!valid(downloadedDropbox))
-            {
-                //this is expected now that downloading support has been removed
-                //Logger.ERROR( "Downloaded Dropbox was not found in Config.xml. Please verify your <downloaded> element is filled in. Cannot contine until this is fixed.");
-                //return false;
-            }
-            else
-            {
-                Logger.WARN( "Downloading is not longer supported for this program. Nothing will be downloaded to: "+ downloadedDropbox);                
-            }
+        //TVDB api key
 
-            //TVDB api key
-            
-            OBSCURE_TVDB_KEY_IN_LOG = true;
-            
-            if(OBSCURE_TVDB_KEY_IN_LOG)
-                TVDB_API_KEY_OBSCURED = (TVDB_API_KEY.length() > 10 ? ("XXXXXXXXXX"+TVDB_API_KEY.substring(10, TVDB_API_KEY.length())) : "XXXXXXXXXX");
-            else
-                TVDB_API_KEY_OBSCURED = TVDB_API_KEY;
-            Logger.DEBUG( "Found TheTVDB Api Key: " + TVDB_API_KEY_OBSCURED);
+        OBSCURE_TVDB_KEY_IN_LOG = true;
 
-            //ManualArchiving
-            Element manualArchivingElem = root.getChild("ManualArchiving");
-            if(manualArchivingElem != null)
-            {
-                MANUAL_ARCHIVING_ENABLED = "true".equalsIgnoreCase(manualArchivingElem.getAttributeValue("enabled"));
-                if(MANUAL_ARCHIVING_ENABLED)
-                {
-                    try
-                    {
-                        HOURS_OLD_BEFORE_MANUAL_ARCHIVE = Double.parseDouble(manualArchivingElem.getChildText("HoursThreshold"));
-                    }
-                    catch(Exception x)
-                    {
-                        Logger.WARN( "Cannot determine HoursThreshold for ManualArchiving, will use default of: "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours: "+x);
-                    }
-                    Logger.DEBUG( "Manual Archiving is enabled with an HoursThreshold of "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours");
-                }
-                 else
-                     Logger.DEBUG( "Manual Archiving is disabled.");
-            }
-            else
-            {
-                MANUAL_ARCHIVING_ENABLED = false;
-                Logger.WARN( "<ManuarArchiving> element not found, manual archiving will be disabled.");
-            }
+        if(OBSCURE_TVDB_KEY_IN_LOG)
+            TVDB_API_KEY_OBSCURED = (TVDB_API_KEY.length() > 10 ? ("XXXXXXXXXX"+TVDB_API_KEY.substring(10, TVDB_API_KEY.length())) : "XXXXXXXXXX");
+        else
+            TVDB_API_KEY_OBSCURED = TVDB_API_KEY;
+        Logger.DEBUG( "Found TheTVDB Api Key: " + TVDB_API_KEY_OBSCURED);
 
-            //VideoCleanUp
-            Element VideoCleanUpElem = root.getChild("VideoCleanUp");
-            if(VideoCleanUpElem != null)
+        //ManualArchiving
+        Element manualArchivingElem = root.getChild("ManualArchiving");
+        if(manualArchivingElem != null)
+        {
+            MANUAL_ARCHIVING_ENABLED = "true".equalsIgnoreCase(manualArchivingElem.getAttributeValue("enabled"));
+            if(MANUAL_ARCHIVING_ENABLED)
             {
                 try
                 {
-                    MISSING_HOURS_DELETE_THRESHOLD = Double.parseDouble(VideoCleanUpElem.getChildText("HoursThreshold"));
+                    HOURS_OLD_BEFORE_MANUAL_ARCHIVE = Double.parseDouble(manualArchivingElem.getChildText("HoursThreshold"));
                 }
                 catch(Exception x)
                 {
-                    Logger.WARN( "Cannot determine HoursThreshold for VideoCleanUp, will use default of: "+ MISSING_HOURS_DELETE_THRESHOLD +" hours: "+ x);
+                    Logger.WARN( "Cannot determine HoursThreshold for ManualArchiving, will use default of: "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours: "+x);
                 }
-                Logger.DEBUG( "VideoCleanUp has an HoursThreshold of "+ MISSING_HOURS_DELETE_THRESHOLD +" hours");
-
-                try
-                {
-                    MISSING_COUNT_DELETE_THRESHOLD = Integer.parseInt(VideoCleanUpElem.getChildText("ConsecutiveThreshold"));
-                }
-                catch(Exception x)
-                {
-                    Logger.WARN( "Cannot determine ConsecutiveThreshold for VideoCleanUp, will use default of: "+ MISSING_COUNT_DELETE_THRESHOLD +" hours: "+ x);
-                }
-                Logger.DEBUG( "VideoCleanUp has an ConsecutiveThreshold of "+ MISSING_COUNT_DELETE_THRESHOLD +" consecutive missing times.");
+                Logger.DEBUG( "Manual Archiving is enabled with an HoursThreshold of "+ HOURS_OLD_BEFORE_MANUAL_ARCHIVE +" hours");
             }
-            else
-            {              
-                Logger.WARN( "<VideoCleanUp> element not found, will use defaults of "+MISSING_HOURS_DELETE_THRESHOLD+" hours and " +MISSING_COUNT_DELETE_THRESHOLD+" consecutive counts");
-            }
+             else
+                 Logger.DEBUG( "Manual Archiving is disabled.");
+        }
+        else
+        {
+            MANUAL_ARCHIVING_ENABLED = false;
+            Logger.WARN( "<ManuarArchiving> element not found, manual archiving will be disabled.");
+        }
 
-            Element preScrapeMusicVidsElem = root.getChild("PreScrapeMusicVids");
-            if(preScrapeMusicVidsElem == null)
+        //VideoCleanUp
+        Element VideoCleanUpElem = root.getChild("VideoCleanUp");
+        if(VideoCleanUpElem != null)
+        {
+            try
             {
-                Logger.WARN( "<PreScrapeMusicVids> element not found, pre-scraping will be disabled for music videos");
-                SCRAPE_MUSIC_VIDEOS = false;
+                MISSING_HOURS_DELETE_THRESHOLD = Double.parseDouble(VideoCleanUpElem.getChildText("HoursThreshold"));
             }
-            else
+            catch(Exception x)
             {
-                SCRAPE_MUSIC_VIDEOS = "true".equalsIgnoreCase(preScrapeMusicVidsElem.getAttributeValue("enabled"));
-                Logger.DEBUG( "PreScrapeMusicVids enabled = "+ SCRAPE_MUSIC_VIDEOS);
+                Logger.WARN( "Cannot determine HoursThreshold for VideoCleanUp, will use default of: "+ MISSING_HOURS_DELETE_THRESHOLD +" hours: "+ x);
             }
-            
-            //get SearchFilters
-            Element searchFilters = root.getChild("SearchFilters");
-            if(searchFilters == null)
+            Logger.DEBUG( "VideoCleanUp has an HoursThreshold of "+ MISSING_HOURS_DELETE_THRESHOLD +" hours");
+
+            try
             {
-                Logger.ERROR( "No <SearchFilters> found, cannot continue.");
-                return false;
+                MISSING_COUNT_DELETE_THRESHOLD = Integer.parseInt(VideoCleanUpElem.getChildText("ConsecutiveThreshold"));
             }
-
-            List<Element> sources = searchFilters.getChildren();
-            
-            for(Element sourceElement : sources)
+            catch(Exception x)
             {
-                String sourceName = sourceElement.getName();                
-                String sourcePath = sourceElement.getAttributeValue("path");
-                if(!tools.valid(sourcePath))
-                {
-                    sourcePath = "";
-                    Logger.DEBUG( "Source path was not specified. Will try to auto-determine it later.");
-                }
-                else//valid path was specified
-                {
-                    //normalize the path (must end with /)
-                    if(!sourcePath.endsWith("/")) sourcePath = sourcePath+"/";
-                }
-                Logger.INFO( "Found source "+sourceName +" with path of "+ (valid(sourcePath) ? sourcePath : "[auto-determine]"));
-                
-                                
-                Source src = new Source(sourceName, sourcePath);
-                boolean inUniqueSource = addSource(src);//check for unique names
-                if(!inUniqueSource) continue;//skip this source since it was not successfully added
+                Logger.WARN( "Cannot determine ConsecutiveThreshold for VideoCleanUp, will use default of: "+ MISSING_COUNT_DELETE_THRESHOLD +" hours: "+ x);
+            }
+            Logger.DEBUG( "VideoCleanUp has an ConsecutiveThreshold of "+ MISSING_COUNT_DELETE_THRESHOLD +" consecutive missing times.");
+        }
+        else
+        {              
+            Logger.WARN( "<VideoCleanUp> element not found, will use defaults of "+MISSING_HOURS_DELETE_THRESHOLD+" hours and " +MISSING_COUNT_DELETE_THRESHOLD+" consecutive counts");
+        }
 
-                String customParser = sourceElement.getAttributeValue("custom_parser");
-                if(tools.valid(customParser))                                    
-                    src.setCustomParser(customParser);//use the specified custom parser name                
-                else src.setCustomParser(src.getName());//use the name as the parser name
-                Logger.INFO( "Setting source's custom_parser to: "+ src.getCustomParser());
+        Element preScrapeMusicVidsElem = root.getChild("PreScrapeMusicVids");
+        if(preScrapeMusicVidsElem == null)
+        {
+            Logger.WARN( "<PreScrapeMusicVids> element not found, pre-scraping will be disabled for music videos");
+            SCRAPE_MUSIC_VIDEOS = false;
+        }
+        else
+        {
+            SCRAPE_MUSIC_VIDEOS = "true".equalsIgnoreCase(preScrapeMusicVidsElem.getAttributeValue("enabled"));
+            Logger.DEBUG( "PreScrapeMusicVids enabled = "+ SCRAPE_MUSIC_VIDEOS);
+        }
 
-                //get subfolders (allowing nested subfolders)
-                List<Element> topSubfolders = sourceElement.getChildren("subfolder");//these are the subfolders directly under the source
-                for(Element topSubfolder : topSubfolders)
+        //get SearchFilters
+        Element searchFilters = root.getChild("SearchFilters");
+        if(searchFilters == null)
+        {
+            Logger.ERROR( "No <SearchFilters> found, cannot continue.");
+            return false;
+        }
+
+        List<Element> sources = searchFilters.getChildren();
+
+        for(Element sourceElement : sources)
+        {
+            String sourceName = sourceElement.getName();                
+            String sourcePath = sourceElement.getAttributeValue("path");
+            if(!valid(sourcePath))
+            {
+                sourcePath = "";
+                Logger.DEBUG( "Source path was not specified. Will try to auto-determine it later.");
+            }
+            else//valid path was specified
+            {
+                //normalize the path (must end with /)
+                if(!sourcePath.endsWith("/")) sourcePath = sourcePath+"/";
+            }
+            Logger.INFO( "Found source "+sourceName +" with path of "+ (valid(sourcePath) ? sourcePath : "[auto-determine]"));
+
+
+            Source src = new Source(sourceName, sourcePath);
+            boolean inUniqueSource = addSource(src);//check for unique names
+            if(!inUniqueSource) continue;//skip this source since it was not successfully added
+
+            String customParser = sourceElement.getAttributeValue("custom_parser");
+            if(valid(customParser))                                    
+                src.setCustomParser(customParser);//use the specified custom parser name                
+            else src.setCustomParser(src.getName());//use the name as the parser name
+            Logger.INFO( "Setting source's custom_parser to: "+ src.getCustomParser());
+
+            //get subfolders (allowing nested subfolders)
+            List<Element> topSubfolders = sourceElement.getChildren("subfolder");//these are the subfolders directly under the source
+            for(Element topSubfolder : topSubfolders)
+            {
+                topSubfolder.setAttribute("level_deep","0");//0 is the absolute top of the levels
+                //digs to the deepest subfolder under each "root" subfolder elem and adds all elements. Start at level 1 since topSubfolder took level 0
+                List<Element> subfolders = getAllChildElements(topSubfolder, "subfolder", 1);
+
+                subfolders.add(0, topSubfolder);//add the top subfolder at the top of the list
+
+                //sort so the deepest subfolders are at the top.
+                //User would expect a deeper subfolder to over-ride a parent subfolder
+                Collections.sort(subfolders, new Comparator<Element>()
                 {
-                    topSubfolder.setAttribute("level_deep","0");//0 is the absolute top of the levels
-                    //digs to the deepest subfolder under each "root" subfolder elem and adds all elements. Start at level 1 since topSubfolder took level 0
-                    List<Element> subfolders = getAllChildElements(topSubfolder, "subfolder", 1);
-                                     
-                    subfolders.add(0, topSubfolder);//add the top subfolder at the top of the list
-                                        
-                    //sort so the deepest subfolders are at the top.
-                    //User would expect a deeper subfolder to over-ride a parent subfolder
-                    Collections.sort(subfolders, new Comparator<Element>()
+                    public int compare(Element e1, Element e2)
                     {
-                        public int compare(Element e1, Element e2)
-                        {
-                            int level1 = Integer.parseInt(e1.getAttributeValue("level_deep"));
-                            int level2 = Integer.parseInt(e2.getAttributeValue("level_deep"));
-                            if(level1 == level2) return 0;
-                            if(level1 >  level2) return -1;
-                            else /*if(level1 < level2)*/ return 1;
-                        }
-                    });
+                        int level1 = Integer.parseInt(e1.getAttributeValue("level_deep"));
+                        int level2 = Integer.parseInt(e2.getAttributeValue("level_deep"));
+                        if(level1 == level2) return 0;
+                        if(level1 >  level2) return -1;
+                        else /*if(level1 < level2)*/ return 1;
+                    }
+                });
 
-                    for(Element subfolder : subfolders)
-                    {
-                        String subfolderName = inheritName(subfolder);
-                        if(!valid(subfolderName))
-                        {
-                            Logger.ERROR( "No name attribute specified for subfolder, it will be skipped!");
-                            continue;
-                        }
-                        else//trim a traling slash if it exists
-                        {
-                            if(subfolderName.endsWith("/"))
-                                subfolderName = subfolderName.substring(0,subfolderName.length()-1);
-                        }
-
-                        //inherit attributes from the parent (sourceElement), and over-ride if specified at the subfolder level
-                        boolean regexName = "true".equalsIgnoreCase(inherit("regex_name", sourceElement, subfolder));
-                        boolean recursive = "true".equalsIgnoreCase(inherit("recursive", sourceElement, subfolder));
-                        boolean forceTVDB = "true".equalsIgnoreCase(inherit("force_tvdb", sourceElement, subfolder));
-                        
-                        //Download support has been removed, notify user if they still are requesting it
-                        boolean download = "true".equalsIgnoreCase(inherit("download", sourceElement, subfolder));
-                        if(download)
-                            Logger.WARN( "Found download attribute set to true, but downloading is no longer support. Nothing will be downloaded, but it will still be streamed.");
-                        
-                        boolean containsMultiPartVideos = "true".equalsIgnoreCase(inherit("multi_part", sourceElement, subfolder));
-                        String type = (inherit("type", sourceElement, subfolder));
-                        String strMaxSeries = (inherit("max_series", sourceElement, subfolder));
-                        int max_series = tools.isInt(strMaxSeries) ? Integer.parseInt(strMaxSeries) : -1;
-                        String strMaxVideos = (inherit("max_videos", sourceElement, subfolder));
-                        int max_vidoes = tools.isInt(strMaxVideos) ? Integer.parseInt(strMaxVideos) : -1;
-                        String movie_set = (inherit("movie_set", sourceElement, subfolder));
-                        String strMovieTags = (inherit("movie_tags", sourceElement, subfolder));
-                        String prefix = (inherit("prefix", sourceElement, subfolder));
-                        String suffix = (inherit("suffix", sourceElement, subfolder));
-                        int level_deep = Integer.parseInt(subfolder.getAttributeValue("level_deep"));
-                        //String compression = (inherit("compression", sourceElement, subfolder));
-                        
-                    	//AngryCamel - 20120817 1620
-                        //force_series will override any parsed series name with the value specified
-                        //The reason this was developed was for TED talks. I did not spend much time 
-                        // thinking about it's possible usage outside of that particular use
-                        // case, but I'm sure someone will find another reason to use it.
-                        String force_series = (inherit("force_series", sourceElement, subfolder));
-
-                        Subfolder subf = new Subfolder(src, subfolderName);
-                        subf.setRecursive(recursive);
-                        subf.setRegexName(regexName);
-                        if(valid(type)) subf.setType(type);
-                        if(max_series > 0) subf.setMaxSeries(max_series);
-                        if(max_vidoes > 0) subf.setMaxVideos(max_vidoes);
-                        subf.setForceTVDB(forceTVDB);
-                        subf.setMovieSet(movie_set);
-                        
-                       
-                        //check for movie tags (split multiple with pipe)
-                        if(valid(strMovieTags)){
-                            List<String> movieTags = new ArrayList<String>();
-                            if(strMovieTags.contains("|"))                            
-                                movieTags.addAll(Arrays.asList(strMovieTags.split("\\|")));
-                            else
-                                movieTags.add(strMovieTags);//single tag
-                            
-                            subf.setMovieTags(movieTags);
-                        }
-                        
-                        
-                        subf.setPrefix(prefix);
-                        subf.setSuffix(suffix);
-                        subf.setCanContainMultiPartVideos(containsMultiPartVideos);
-                        //subf.setDownload(download);
-                        subf.setLevelDeep(level_deep);
-                        //subf.setCompression(compression);
-
-                    	//AngryCamel - 20120817 1620
-                        subf.setForceSeries(force_series);
-
-                        String indent = "";
-                        for(int i=subf.getLevelDeep(); i>=0; i--)indent+="\t";
-                            
-                        Logger.INFO( indent+"Next Subfolder: name="+subf.getFullName()+", recursive="+subf.isRecursive()
-                                +", type="+subf.getType()+", max_series="+subf.getMaxSeries()+", "
-                                + "max_videos="+subf.getMaxVideos()+", movie_set="+subf.getMovieSet()+", prefix="+subf.getPrefix()+", suffix="+subf.getSuffix()+
-                                /*", download="+download+", compression="+(valid(compression) ? compression:"")+*/", multi_part="+containsMultiPartVideos +", force_series="+subf.getForceSeries());
-
-                        //check for excludes/filters at the subfolder level
-                        //inherit any excludes/filters from parent subfolders
-                        List<Element> subfolderAndParents = getParentElements(subfolder);
-                        subfolderAndParents.add(0, sourceElement);//add source at the top. Will inherit excludes/filters from it as well
-                        Collections.reverse(subfolderAndParents);//start at subfolder level and work up for easier understanding in logs
-                        for(Element nextSubf : subfolderAndParents)
-                        {
-                            Element excludesElem = nextSubf.getChild("exclude");
-                            if(excludesElem != null)
-                            {
-                                List<Element> excludes = excludesElem.getChildren();
-                                for(Element exclude : excludes)
-                                {
-                                    subf.addExclude(exclude.getName(), exclude.getText());
-                                    Logger.DEBUG( indent+"\tAdded Exclude: type="+exclude.getName()+", value="+exclude.getText());
-                                }
-                            }
-                        }
-
-                        for(Element nextSubf : subfolderAndParents)
-                        {
-                            Element filtersElem = nextSubf.getChild("filter");
-                            if(filtersElem != null)
-                            {
-                                List<Element> filters = filtersElem.getChildren();
-                                for(Element filter : filters)
-                                {
-                                    subf.addFitler(filter.getName(), filter.getText());
-                                    Logger.DEBUG( indent+"\tAdded subfolder Filter: type="+filter.getName()+", value="+filter.getText());
-                                }
-                            }
-                        }
-                        
-                    	//AngryCamel - 20120815 2246
-                        //Parsers override the default series and title parser in Archiver.addTVMetaData()
-                        //If multiple parsers are supplied, the order that they are read
-                        // from the XML is the priority order they will be processed in
-                        // until one finds a match.
-                        for(Element nextSubf : subfolderAndParents)
-                        {
-                            Element parserElem = nextSubf.getChild("parser");
-                            if(parserElem != null)
-                            {
-                                List<Element> parsers = parserElem.getChildren();
-                                for(Element parser : parsers)
-                                {
-                                    subf.addParser(parser.getName(), parser.getText());
-                                    Logger.DEBUG( indent+"\tAdded subfolder Parser: type="+parser.getName()+", value="+parser.getText());
-                                }
-                            }
-                        }
-                        
-                        src.addSubfolder(subf);
-                    }//end subfolders
-                }//end top subfolders               
-            }//end Sources            
-            
-            
-            //GlobalExcludes
-            Element globalExcludesElement = root.getChild("GlobalExcludes");
-            if(globalExcludesElement != null)
-            {
-                List<Element> excludes = globalExcludesElement.getChildren();
-                for(Element exclude : excludes)
+                for(Element subfolder : subfolders)
                 {
-                    Exclude.addGlobalExclude(exclude.getName(), exclude.getText());
-                    Logger.INFO( "Added Global Exclude, type="+exclude.getName()+", value="+exclude.getText());
-                }
-            }
+                    String subfolderName = inheritName(subfolder);
+                    if(!valid(subfolderName))
+                    {
+                        Logger.ERROR( "No name attribute specified for subfolder, it will be skipped!");
+                        continue;
+                    }
+                    else//trim a traling slash if it exists
+                    {
+                        if(subfolderName.endsWith("/"))
+                            subfolderName = subfolderName.substring(0,subfolderName.length()-1);
+                    }
 
-            Element compressionElem = root.getChild("Compression");
-            if(compressionElem != null)
-                Logger.WARN( "Compression definitions found, but will be ignored because downloading is no longer supported.");
-            
-              
-        }//end if IS_MY_LIBRARY
+                    //inherit attributes from the parent (sourceElement), and over-ride if specified at the subfolder level
+                    boolean regexName = "true".equalsIgnoreCase(inherit("regex_name", sourceElement, subfolder));
+                    boolean recursive = "true".equalsIgnoreCase(inherit("recursive", sourceElement, subfolder));
+                    boolean forceTVDB = "true".equalsIgnoreCase(inherit("force_tvdb", sourceElement, subfolder));
+
+                    //Download support has been removed, notify user if they still are requesting it
+                    boolean download = "true".equalsIgnoreCase(inherit("download", sourceElement, subfolder));
+                    if(download)
+                        Logger.WARN( "Found download attribute set to true, but downloading is no longer support. Nothing will be downloaded, but it will still be streamed.");
+
+                    boolean containsMultiPartVideos = "true".equalsIgnoreCase(inherit("multi_part", sourceElement, subfolder));
+                    String type = (inherit("type", sourceElement, subfolder));
+                    String strMaxSeries = (inherit("max_series", sourceElement, subfolder));
+                    int max_series = isInt(strMaxSeries) ? Integer.parseInt(strMaxSeries) : -1;
+                    String strMaxVideos = (inherit("max_videos", sourceElement, subfolder));
+                    int max_vidoes = isInt(strMaxVideos) ? Integer.parseInt(strMaxVideos) : -1;
+                    String movie_set = (inherit("movie_set", sourceElement, subfolder));
+                    String strMovieTags = (inherit("movie_tags", sourceElement, subfolder));
+                    String prefix = (inherit("prefix", sourceElement, subfolder));
+                    String suffix = (inherit("suffix", sourceElement, subfolder));
+                    int level_deep = Integer.parseInt(subfolder.getAttributeValue("level_deep"));
+                    //String compression = (inherit("compression", sourceElement, subfolder));
+
+                    //AngryCamel - 20120817 1620
+                    //force_series will override any parsed series name with the value specified
+                    //The reason this was developed was for TED talks. I did not spend much time 
+                    // thinking about it's possible usage outside of that particular use
+                    // case, but I'm sure someone will find another reason to use it.
+                    String force_series = (inherit("force_series", sourceElement, subfolder));
+
+                    Subfolder subf = new Subfolder(src, subfolderName);
+                    subf.setRecursive(recursive);
+                    subf.setRegexName(regexName);
+                    if(valid(type)) subf.setType(type);
+                    if(max_series > 0) subf.setMaxSeries(max_series);
+                    if(max_vidoes > 0) subf.setMaxVideos(max_vidoes);
+                    subf.setForceTVDB(forceTVDB);
+                    subf.setMovieSet(movie_set);
+
+
+                    //check for movie tags (split multiple with pipe)
+                    if(valid(strMovieTags)){
+                        List<String> movieTags = new ArrayList<String>();
+                        if(strMovieTags.contains("|"))                            
+                            movieTags.addAll(Arrays.asList(strMovieTags.split("\\|")));
+                        else
+                            movieTags.add(strMovieTags);//single tag
+
+                        subf.setMovieTags(movieTags);
+                    }
+
+
+                    subf.setPrefix(prefix);
+                    subf.setSuffix(suffix);
+                    subf.setCanContainMultiPartVideos(containsMultiPartVideos);
+                    //subf.setDownload(download);
+                    subf.setLevelDeep(level_deep);
+                    //subf.setCompression(compression);
+
+                    //AngryCamel - 20120817 1620
+                    subf.setForceSeries(force_series);
+
+                    String indent = "";
+                    for(int i=subf.getLevelDeep(); i>=0; i--)indent+="\t";
+
+                    Logger.INFO( indent+"Next Subfolder: name="+subf.getFullName()+", recursive="+subf.isRecursive()
+                            +", type="+subf.getType()+", max_series="+subf.getMaxSeries()+", "
+                            + "max_videos="+subf.getMaxVideos()+", movie_set="+subf.getMovieSet()+", prefix="+subf.getPrefix()+", suffix="+subf.getSuffix()+
+                            /*", download="+download+", compression="+(valid(compression) ? compression:"")+*/", multi_part="+containsMultiPartVideos +", force_series="+subf.getForceSeries());
+
+                    //check for excludes/filters at the subfolder level
+                    //inherit any excludes/filters from parent subfolders
+                    List<Element> subfolderAndParents = getParentElements(subfolder);
+                    subfolderAndParents.add(0, sourceElement);//add source at the top. Will inherit excludes/filters from it as well
+                    Collections.reverse(subfolderAndParents);//start at subfolder level and work up for easier understanding in logs
+                    for(Element nextSubf : subfolderAndParents)
+                    {
+                        Element excludesElem = nextSubf.getChild("exclude");
+                        if(excludesElem != null)
+                        {
+                            List<Element> excludes = excludesElem.getChildren();
+                            for(Element exclude : excludes)
+                            {
+                                subf.addExclude(exclude.getName(), exclude.getText());
+                                Logger.DEBUG( indent+"\tAdded Exclude: type="+exclude.getName()+", value="+exclude.getText());
+                            }
+                        }
+                    }
+
+                    for(Element nextSubf : subfolderAndParents)
+                    {
+                        Element filtersElem = nextSubf.getChild("filter");
+                        if(filtersElem != null)
+                        {
+                            List<Element> filters = filtersElem.getChildren();
+                            for(Element filter : filters)
+                            {
+                                subf.addFitler(filter.getName(), filter.getText());
+                                Logger.DEBUG( indent+"\tAdded subfolder Filter: type="+filter.getName()+", value="+filter.getText());
+                            }
+                        }
+                    }
+
+                    //AngryCamel - 20120815 2246
+                    //Parsers override the default series and title parser in Archiver.addTVMetaData()
+                    //If multiple parsers are supplied, the order that they are read
+                    // from the XML is the priority order they will be processed in
+                    // until one finds a match.
+                    for(Element nextSubf : subfolderAndParents)
+                    {
+                        Element parserElem = nextSubf.getChild("parser");
+                        if(parserElem != null)
+                        {
+                            List<Element> parsers = parserElem.getChildren();
+                            for(Element parser : parsers)
+                            {
+                                subf.addParser(parser.getName(), parser.getText());
+                                Logger.DEBUG( indent+"\tAdded subfolder Parser: type="+parser.getName()+", value="+parser.getText());
+                            }
+                        }
+                    }
+
+                    src.addSubfolder(subf);
+                }//end subfolders
+            }//end top subfolders               
+        }//end Sources            
+
+
+        //GlobalExcludes
+        Element globalExcludesElement = root.getChild("GlobalExcludes");
+        if(globalExcludesElement != null)
+        {
+            List<Element> excludes = globalExcludesElement.getChildren();
+            for(Element exclude : excludes)
+            {
+                Exclude.addGlobalExclude(exclude.getName(), exclude.getText());
+                Logger.INFO( "Added Global Exclude, type="+exclude.getName()+", value="+exclude.getText());
+            }
+        }
+
+        Element compressionElem = root.getChild("Compression");
+        if(compressionElem != null)
+            Logger.WARN( "Compression definitions found, but will be ignored because downloading is no longer supported.");
+
 
         
         return true;//got to end w/o issues
@@ -697,10 +686,11 @@ public class Config extends Constants
         //Archived Files tracker database
         final String archivedFilesDbLocation = BASE_DIR+SEP+"res"+SEP+"ArchivedFiles.db";                
         Logger.INFO( "Initializing SQLite database at: "+ archivedFilesDbLocation);
-        archivedFilesDB = new ArchivedFilesDB(archivedFilesDbLocation);
+        
         //create the db table if it doesnt exist
         try
         {
+            archivedFilesDB = new ArchivedFilesDB(archivedFilesDbLocation);
             String tableName = "ArchivedFiles";            
             archivedFilesDB.executeSingleUpdate(
                     "CREATE TABLE IF NOT EXISTS "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "                    
@@ -710,10 +700,10 @@ public class Config extends Constants
                     + "date_archived TIMESTAMP NOT NULL, "
                     + "missing_since TIMESTAMP, "
                     + "missing_count INTEGER"
-            + ")",null);
+            + ")",(Object[]) null);
             archivedFilesDB.closeStatement();
 
-            archivedFilesDB.executeSingleUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_dropbox_location ON "+tableName+" (dropbox_location)",null);            
+            archivedFilesDB.executeSingleUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_dropbox_location ON "+tableName+" (dropbox_location)",(Object[])null);            
             
             /*additional changes since initial realease*/
             String[] varcharColumns = new String[] {"video_type", "title", "series", "artist"};//varchar columns
@@ -721,7 +711,7 @@ public class Config extends Constants
             {
                 if(!archivedFilesDB.hasColumn(tableName, columnName))
                 {
-                    archivedFilesDB.executeSingleUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" DEFAULT NULL",null);                    
+                    archivedFilesDB.executeSingleUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" DEFAULT NULL",(Object[])null);                    
                 }
             }
             
@@ -730,62 +720,9 @@ public class Config extends Constants
             {
                 if(!archivedFilesDB.hasColumn(tableName, columnName))
                 {
-                    archivedFilesDB.executeSingleUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" INTEGER DEFAULT NULL",null);                    
+                    archivedFilesDB.executeSingleUpdate("ALTER TABLE "+ tableName +" ADD COLUMN "+columnName+" INTEGER DEFAULT NULL",(Object[])null);                    
                 }
-            }
-
-        /*Downloading support has been removed
-            //download tables
-            tableName = "Downloads";
-            archivedFilesDB.getStatement().executeUpdate(
-                    "CREATE TABLE IF NOT EXISTS "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
-                    + "archived_file_id INTEGER NOT NULL, "
-                    + "started TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
-                    + "status NOT NULL,"
-                    + "dest_no_ext NOT NULL"
-            + ")");
-            archivedFilesDB.closeStatement();             
-             
-
-            //additional changes since initial realease for Downloads table
-            varcharColumns = new String[] {"compression"};//varchar columns
-            for(String columnName : varcharColumns)
-            if(!archivedFilesDB.hasColumn(tableName, columnName))
-            {
-                archivedFilesDB.getStatement().executeUpdate("ALTER TABLE "+ tableName +" ADD COLUMN compression DEFAULT NULL");
-                archivedFilesDB.closeStatement();
-            }
-
-            archivedFilesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_download ON "+tableName+" (archived_file_id)");
-            archivedFilesDB.closeStatement();
-
-            tableName = "DownloadFiles";
-            archivedFilesDB.getStatement().executeUpdate(
-                    "CREATE TABLE IF NOT EXISTS "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
-                    + "download_id INTEGER  NOT NULL, "
-                    + "url NOT NULL, "
-                    + "file NOT NULL,"
-                    + "dropbox_location DEFAULT NULL"
-            + ")");
-            archivedFilesDB.closeStatement();
-            archivedFilesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_download_url ON "+tableName+" (download_id, url)");
-            archivedFilesDB.closeStatement();
-            archivedFilesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_download_file ON "+tableName+" (download_id, file)");
-            archivedFilesDB.closeStatement();
-             
-            
-            //EDLChanges
-            tableName = "EDLChanges";
-            archivedFilesDB.getStatement().executeUpdate(
-                    "CREATE TABLE IF NOT EXISTS "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
-                    + "file NOT NULL, "//path to the edl file
-                    + "converted_to INTEGER NOT NULL"        //edl_type
-            + ")");
-            archivedFilesDB.closeStatement();
-            archivedFilesDB.getStatement().executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_edl_file ON "+tableName+" (file)");
-            archivedFilesDB.closeStatement();                         
-         */
-
+            }        
         }
         catch(Exception x)
         {
@@ -799,11 +736,11 @@ public class Config extends Constants
 
         //Queued Meta Data Changes tracker database
         final String queuedMetaDataChangesLocation = BASE_DIR+SEP+"res"+SEP+"QueuedMetaDataChanges.db";
-        Logger.INFO( "Initializing SQLite database at: "+ queuedMetaDataChangesLocation);
-        queuedChangesDB = new QueuedChangesDB(queuedMetaDataChangesLocation);
+        Logger.INFO( "Initializing SQLite database at: "+ queuedMetaDataChangesLocation);        
         //create the db table if it doesnt exist
         try
         {
+            queuedChangesDB = new QueuedChangesDB(queuedMetaDataChangesLocation);
             final String tableName = "QueuedChanges";                        
             //stmt.executeUpdate("drop table if exists "+tableName);
             queuedChangesDB.executeSingleUpdate("CREATE table if not exists "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
@@ -811,8 +748,8 @@ public class Config extends Constants
                     + "video_type NOT NULL, "
                     + "meta_data_type NOT NULL, "
                     + "value NOT NULL, "
-                    + "status NOT NULL)",null);            
-            queuedChangesDB.executeSingleUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_queued_change ON QueuedChanges (dropbox_location, meta_data_type)",null);            
+                    + "status NOT NULL)",(Object[])null);            
+            queuedChangesDB.executeSingleUpdate("CREATE UNIQUE INDEX IF NOT EXISTS unique_queued_change ON QueuedChanges (dropbox_location, meta_data_type)",(Object[])null);            
         }
         catch(Exception x)
         {
@@ -826,18 +763,18 @@ public class Config extends Constants
 
         //scraper query database
         final String scraperDBLocation = BASE_DIR+SEP+"res"+SEP+"scraper.db";
-        Logger.INFO( "Initializing SQLite database at: "+ scraperDBLocation);
-        scraperDB = new ScraperDB(scraperDBLocation);
+        Logger.INFO( "Initializing SQLite database at: "+ scraperDBLocation);        
         //create the db table if it doesnt exist
         try
         {
+            scraperDB = new ScraperDB(scraperDBLocation);
             final String tableName = "APIQueries";
 
             //stmt.executeUpdate("drop table if exists "+tableName);
             scraperDB.executeSingleUpdate("create table if not exists "+tableName+" (id INTEGER PRIMARY KEY AUTOINCREMENT , "
                     + "api_name NOT NULL, "
                     + "query_url NOT NULL, "
-                    + "query_time TIMESTAMP NOT NULL)",null);                                    
+                    + "query_time TIMESTAMP NOT NULL)",(Object[])null);                                    
         }
         catch(Exception x)
         {
@@ -978,10 +915,6 @@ public class Config extends Constants
     }
 
 
-    public static boolean valid(String s)
-    {
-        return tools.valid(s);//convenience
-    }
     public static String escapePath(String path)
     {
         String escaped = path.replace(xbmc.util.Constants.DELIM, "/");
@@ -1002,7 +935,8 @@ public class Config extends Constants
     {                                
         if(queuedChangesDB != null)queuedChangesDB.close();
         if(archivedFilesDB != null)archivedFilesDB.close();
-        if(scraperDB != null)scraperDB.close();               
+        if(scraperDB != null)scraperDB.close();      
+//        if(xbmcDb != null) xbmcDb.close();
         Logger.NOTICE("Ended: "+PROGRAM_NAME+", v"+VERSION+", compatible with XBMC "+ XBMC_COMPATIBILITY);
         if(Logger != null) Logger.close();
     }

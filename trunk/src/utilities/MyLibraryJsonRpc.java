@@ -1,13 +1,21 @@
 package utilities;
 
-import java.util.*;
 import java.util.concurrent.*;
 import mylibrary.importer;
+import btv.logger.BTVLogLevel;
+
+import java.io.File;
+import java.util.*;
+
+import xbmc.db.XBMCVideoDbInterface;
+import xbmcdb.db.tools.VideoType;
+import xbmc.jsonrpc.XbmcJsonRpc;
 import xbmc.util.*;
+
 import static xbmc.util.Constants.*;
 import static xbmc.util.XbmcTools.*;
-import xbmc.jsonrpc.XbmcJsonRpc;
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 
 public class MyLibraryJsonRpc extends XbmcJsonRpc
 {
@@ -233,5 +241,261 @@ public class MyLibraryJsonRpc extends XbmcJsonRpc
             return null;
         }        
     }
-   
+    
+    
+    /**
+     * Reads all queued meta data changes and attempts to complete them by editing the XBMC Database directly.
+     * TODO: Convert what we can to use JSON-RPC interface
+     *      DONE: bradvido 11/12/2012. THis class uses JSON-RPC for everything. No XBMC db connection needed !_(::)_!
+     */
+    public void addMetaDataFromQueue()
+    {
+        Config.setShortLogDesc("Meta-Data");
+        List<QueuedChange> queuedChanges = Config.queuedChangesDB.getQueuedChanges();
+        Logger.NOTICE( "Attempting to integrate "+ queuedChanges.size() +" queued meta-data changes into XBMC's MySQL video library.");
+        List<QueuedChange> changesToDelete = new ArrayList<QueuedChange>();//these are the changes that are no longer valid
+        List<QueuedChange> changesCompleted = new ArrayList<QueuedChange>();//these are the changes that were succseefully implemented
+        Set<String> strmsNotInLibrary = new HashSet<String>();
+        for(QueuedChange qc : queuedChanges)
+        {            
+            try
+            {                
+                String archivedLocation = qc.getDropboxLocation();                
+                File archivedStrmFile = new File(archivedLocation);//by the time it has gotten here, the strm file should be in the library
+                if(strmsNotInLibrary.contains(archivedStrmFile.toString())) 
+                    continue;//we've already determined this isn't in the libarary, no need to attempt more meta data changes
+                
+                if(!archivedStrmFile.exists())
+                {//.strm doesnt exist in dropbox                   
+                    changesToDelete.add(qc);
+                    Logger.INFO( "REMOVE: This video no longer exists in the dropbox, so it is being removed from meta-data queue: "+ archivedStrmFile);
+                    continue;
+                }
+                                
+                //map the string type to the proper type
+                VideoType videoType = qc.getProperVideoType();
+                
+                //make sure its a known video type
+                if(videoType == null || !VideoType.isMember(videoType))
+                {                                
+                    Logger.WARN("REMOVE: Unknown video type: \""+ videoType+"\", will not update meta data");                            
+                    changesToDelete.add(qc);
+                    continue;
+                }
+                
+                
+                MetaDataType metaDataType = qc.getTypeOfMetaData();
+                String value = qc.getValue();
+
+                String xbmcPath = XBMCVideoDbInterface.getFullXBMCPath(archivedStrmFile);//the path including filename
+                
+                if (valid(Config.LINUX_SAMBA_PREFIX ))
+                {
+                    xbmcPath = utilities.Config.LINUX_SAMBA_PREFIX + xbmcPath;
+                    Logger.DEBUG( "Using LINUX_SAMBA_PREFIX. Concatentated path: "+ xbmcPath);
+                }
+
+                //bradvido -- 11/12/2012
+                //Using JSON-RPC instead of direct db interaction
+                XbmcVideoLibraryFile xbmcVideo = getVideoFileDetails(xbmcPath);
+                                
+                boolean videoIsInXBMCsLibrary = xbmcVideo!=null && xbmcVideo.isInLibrary();
+                if(videoIsInXBMCsLibrary)
+                {
+                    //this video file is in the database, update it                                        
+                    int video_id = xbmcVideo.getLibraryId();                    
+
+                    if(MetaDataType.MOVIE_SET == metaDataType)
+                    {
+                        String setName = value;
+                        if(!valid(setName))
+                        {
+                            Logger.DEBUG( "OK: movie set name is empty, will not add to a movie set: "+ archivedStrmFile);
+                            changesCompleted.add(qc);
+                            continue;
+                        }
+                        
+                        //this is the set that the movie currently exists in (if any)
+                        XbmcMovie movie = getMovieDetails(video_id);
+                        int currentMoviesSetId = movie.getSetId();
+                        boolean movieCurrentlyBelongsToASet = currentMoviesSetId > 0;
+                        
+                        
+                        //this is the set we want to add the movie to (if it already exists)
+                        XbmcMovieSet movieSet = getMovieSetByName(setName);
+                        int destinationSetId = movieSet == null ? -1 : movieSet.getSetid();
+                        boolean destinationSetExists = destinationSetId > 0;
+                        
+                        boolean movieAlreadyExistsInDestinationSet = 
+                                   movieCurrentlyBelongsToASet 
+                                && destinationSetExists 
+                                && destinationSetId == currentMoviesSetId;
+
+                        
+                        if(movieAlreadyExistsInDestinationSet)
+                        {
+                            Logger.DEBUG( "OK: This movie already exists in the set \""+setName+"\", skipping.");
+                            changesCompleted.add(qc);
+                            continue;
+                        }
+                                                
+                        //in XBMC Frodo, movies can only belong to one set (favors using tags for many-to-many relationships)
+                        //over-write the existing set
+                        if(movieCurrentlyBelongsToASet)//movie already belongs to a different set than our destination set. Don't overwrite
+                        {
+                            String existingSetName = movie.getSetName();
+                            Logger.WARN("This movie already belongs to a different set ("+existingSetName+", setid="+currentMoviesSetId+"), will overwrite with user-specified set: \""+setName+"\":"+archivedStrmFile);                                                                                            
+                        }
+                        
+                        //set the movie set using json-rpc
+                        boolean success = setMovieSet(video_id, setName);                        
+                        if(success)
+                        {
+                            Logger.INFO( "SUCCESS: added movie (id="+video_id+") to movieset named \"" + value + "\": " + archivedStrmFile);
+                            changesCompleted.add(qc);
+                        }
+                        else throw new Exception("SKIP: Failed to add to movie set \""+value+"\": "+archivedStrmFile+" using JSON-RPC");
+                    }
+                    else if(MetaDataType.MOVIE_TAGS == metaDataType)
+                    {
+                          String strDesiredTags = value;
+                          XbmcMovie movie = getMovieDetails(video_id);
+                          if(movie == null)
+                          {
+                              throw new Exception("SKIP: Tags cannot be determined. Could not get movie details for movie id: "+ video_id);
+                          }
+                        
+                        //determine existing tags
+                        String[] existingTags = movie.getTags();
+                        if(existingTags != null)
+                            Arrays.sort(existingTags);
+                        Logger.DEBUG("Existing Tags = "+ Arrays.toString(existingTags));
+                        
+                        final String splitter = "|";  
+                        String[] desiredTags = strDesiredTags.contains(splitter) ? splitLiteralDelim(strDesiredTags, splitter)
+                                                                            : new String[]{strDesiredTags};                                                                                                                          
+                                                
+                        
+                        if(desiredTags == null)
+                        {
+                            Logger.WARN("Found no value for desired tags, will set to none.");
+                            desiredTags = new String[0];
+                        }                        
+                        Arrays.sort(desiredTags);//get alphabetical order so we can compare and ignore order                        
+                        Logger.DEBUG("Desired Tags = "+ Arrays.toString(desiredTags));                        
+                        
+                        boolean tagsHaveChanged = 
+                            existingTags == null  ? true
+                                                  : !Arrays.equals(existingTags, desiredTags);
+                         
+                        if(!tagsHaveChanged){
+                            Logger.INFO("OK: Tags have not changed. Existing = "+ Arrays.toString(existingTags)+", Desired = "+ Arrays.toString(desiredTags));
+                            changesCompleted.add(qc);
+                            continue;
+                        }
+                        
+                        //this sets the tags to desiredTags (replacing/removing existing values)
+                        boolean successfullySetTags = setMovieTags(video_id, desiredTags);                        
+                        if(successfullySetTags)
+                        {
+                            Logger.INFO( "SUCCESS: set movie tags "+Arrays.toString(desiredTags) +" for movie (id="+video_id+"), previous tags = "+ Arrays.toString(existingTags)+": " + archivedStrmFile);                                
+                            //completed changes for movie_tags
+                            changesCompleted.add(qc);
+                        }
+                        else throw new Exception("SKIP: Failed to add movie tags "+Arrays.toString(desiredTags)+" using JSON-RPC");                            
+                                                                                               
+                    }
+                    else if(metaDataType.isXFix())//prefix or suffix
+                    {
+                        
+                        
+                        String currentTitle = xbmcVideo.getTitle();
+                        if(currentTitle == null)
+                        {
+                            Logger.WARN("Cannot determine existing label for this video. Will assume it needs to be updated.");
+                            currentTitle = "";
+                        }                        
+
+                        boolean needsUpdate = false;
+                        String newValue, xFix;
+                        if(MetaDataType.PREFIX == metaDataType)
+                        {
+                            xFix = "prefix";                            
+                            needsUpdate = !currentTitle.startsWith(value);
+                            newValue = value + currentTitle;                                
+                            
+                        }
+                        else// if(SUFFIX.equals(metaDataType))//suffix
+                        {
+                            xFix = "suffix";
+                            needsUpdate = !currentTitle.endsWith(value);
+                            newValue = currentTitle + value;
+                        }
+                        //else never gets here because of parent if(...)
+                        
+                        if(!valid(value))
+                        {
+                            Logger.DEBUG( "OK: "+xFix +" is empty, no need to change anything for: "+ archivedStrmFile);
+                            changesCompleted.add(qc);
+                            continue;
+                        }                                                
+                        
+                        if(!needsUpdate)
+                        {
+                            Logger.INFO("OK: Not updating because this video already has the "+ xFix + "\""+value+"\" at "+archivedStrmFile);
+                            changesCompleted.add(qc);
+                            continue;
+                        }                                                
+                        
+                        //do the update                
+                        boolean success = setTitle(videoType, video_id, toAscii(newValue));//ascii'ing this to avoid problem with json-rpc rejecting special characters TODO: figure out charset problems
+                        if(!success)
+                            Logger.WARN( "Failed to add prefix/suffix with JSON-RPC. Will try again next time...");
+                        else
+                        {
+                            Logger.INFO("SUCCESS: Added "+xFix +" of \""+value+"\" to title of video (id="+video_id+"): "+ archivedStrmFile + ". New Title = \""+newValue+"\"");
+                            changesCompleted.add(qc);
+                        }
+                    }
+                }
+                else
+                {
+                    strmsNotInLibrary.add(archivedStrmFile.toString());
+                    throw new Exception("SKIP: The video is not yet in XBMC's library: "+archivedStrmFile);                           
+                }
+            }
+            catch(Exception x)
+            {
+                boolean isSkipException = (x.getMessage()+"").startsWith("SKIP: ");
+                Logger.log(
+                        isSkipException ? BTVLogLevel.INFO : BTVLogLevel.WARN, 
+                        isSkipException ? "SKIPPING meta-data update: "+x.getMessage() : "Failed updating meta data: "+ x, 
+                        isSkipException ? null : x);
+            }
+        }
+        
+        int changesDone = (changesCompleted.size() + changesToDelete.size());
+        int changesRemaining = queuedChanges.size()-changesDone;
+        int numChangesCompleted = queuedChanges.size()- changesRemaining;
+        Logger.NOTICE( "Successfully completed "+numChangesCompleted+" queued metadata changes. There are now "+ changesRemaining +" changes left in the queue.");
+
+        Logger.NOTICE( "Updating QueuedChanges database to reflect the "+changesCompleted.size()+" successful metatadata changes.");
+        for(QueuedChange qc : changesCompleted)
+        {
+            //update the status as COMPLETED in the sqlite tracker
+            boolean updated = Config.queuedChangesDB.executeSingleUpdate("UPDATE QueuedChanges SET status = ? WHERE id = ?",COMPLETED,qc.getId());
+                    
+            if(!updated)Logger.ERROR( "Could not update status as "+COMPLETED +" for queued change. This may result in duplicate meta-data for file: "+ qc.getDropboxLocation());
+        }
+        
+        Logger.NOTICE( "Updating QueuedChanges database to reflect the "+changesToDelete.size()+" metatadata changes that are no longer needed.");
+        //delete the ones that can be deleted
+        for(QueuedChange qc : changesToDelete)
+        {            
+            boolean deleted = Config.queuedChangesDB.executeSingleUpdate("DELETE FROM QueuedChanges WHERE id = ?",(qc.getId()));
+            if(!deleted)Logger.ERROR( "Could not delete metadata queue file in prep for re-write. This may result in duplicate entries for file: "+ qc.getDropboxLocation());
+        }
+        Logger.NOTICE( "Done updating metadata queued changed database.");
+    }
+
 }

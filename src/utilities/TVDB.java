@@ -9,6 +9,7 @@ import org.jdom.Document;
 import org.jdom.Element;
 
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 
 public class TVDB
 {      
@@ -51,14 +52,14 @@ public class TVDB
         String episodeTitle = video.getTitle();
         String originalAirDate = video.getOriginalAirDate();
 
-        boolean canLookupSeriedId = tools.valid(seriesTitle) || video.isTVDBIdOverridden();
+        boolean canLookupSeriedId = valid(seriesTitle) || video.isTVDBIdOverridden();
         if(!canLookupSeriedId)
         {
             Logger.WARN( "Cannot lookup TV series because series name is unknown: "+video.getFullPathEscaped());
             return false;
         }
 
-        boolean canLookupEpisode = tools.valid(episodeTitle) || tools.valid(originalAirDate);
+        boolean canLookupEpisode = valid(episodeTitle) || valid(originalAirDate);
         if(!canLookupEpisode)
         {
             Logger.WARN( "Cannot lookup TV episode because neither episode title nor original air date are known: "+video.getFullPathEscaped());
@@ -99,9 +100,9 @@ public class TVDB
                 Logger.INFO( "TheTVDB series ID is already known, no need to look it up. Using ID of: \"" + video.getTVDBId()+"\"");
             }
 
-            boolean originalAirDateIsAvailable = tools.valid(tools.normalize(video.getOriginalAirDate()));
+            boolean originalAirDateIsAvailable = valid(tools.normalize(video.getOriginalAirDate()));
             if(!originalAirDateIsAvailable) Logger.DEBUG( "Original air date is not known, will not try to match on it.");
-            boolean episodeTitleIsAvailable = tools.valid(tools.normalize(video.getTitle()));
+            boolean episodeTitleIsAvailable = valid(tools.normalize(video.getTitle()));
             if(!episodeTitleIsAvailable) Logger.DEBUG( "No episode title is available, will not try to match on it.");
 
             if(!originalAirDateIsAvailable && !episodeTitleIsAvailable)
@@ -154,7 +155,7 @@ public class TVDB
                     String tvdbEpisodeTitle = episode.getChildText("EpisodeName");
                     String tvdbSeasonNumber = episode.getChildText("SeasonNumber");
                     String tvdbEpisodeNumber = episode.getChildText("EpisodeNumber");
-                    hasTVDBImage = tools.valid(episode.getChildText("filename"));//<filename> stores the path to the .jpg image for the episode
+                    hasTVDBImage = valid(episode.getChildText("filename"));//<filename> stores the path to the .jpg image for the episode
 
                     String tvdbFullInfo = " Season " + tvdbSeasonNumber + ", Episode " + tvdbEpisodeNumber + ", Titled \"" + tvdbEpisodeTitle +"\", "
                             + "first aired on " + tvdbFirstAired+", has episode image: "+ hasTVDBImage;
@@ -227,9 +228,9 @@ public class TVDB
                             return false;
                         }
 
-                        if(!tools.valid(episodeTitle))
+                        if(!valid(episodeTitle))
                         {
-                            if(tools.valid(tvdbEpisodeTitle))
+                            if(valid(tvdbEpisodeTitle))
                             {
                                 Logger.DEBUG( "Setting video title to title from the TVDB: \""+tvdbEpisodeTitle+"\"");
                                 video.setTitle(tvdbEpisodeTitle);

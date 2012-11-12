@@ -3,6 +3,7 @@ package utilities;
 import java.util.*;
 
 import static utilities.Constants.*;
+import static btv.tools.BTVTools.*;
 
 public class Subfolder
 {
@@ -171,7 +172,7 @@ public class Subfolder
             boolean match;
             String nameToUse;
             if(isRegexName())//get the regex matchign string and use that to compare .startsWith
-               nameToUse = tools.getRegexMatch(getFullName(), folderPath);
+               nameToUse = getRegexMatch(getFullName(), folderPath);
             else//regular .startsWith using the name
                 nameToUse = getFullName();
             
@@ -198,7 +199,7 @@ public class Subfolder
         boolean exactMatch;
         String nameToUse;
         if(isRegexName())        
-            nameToUse = tools.getRegexMatch(getFullName(), folderPath);//get matching regex string for the name
+            nameToUse = getRegexMatch(getFullName(), folderPath);//get matching regex string for the name
         else
             nameToUse = getFullName();//normal name
 
@@ -234,7 +235,7 @@ public class Subfolder
                     //Logger.DEBUG("DigDeeper Regex match ? "+ regexMatches +": \""+nameToCheck + "\" ["+(regexMatches ? "matches" : "does not match")+"] \""+folderPath+"\"");
                     if(regexMatches)
                     {
-                        regexMatch = tools.getRegexMatch(nameToCheck, folderPath);
+                        regexMatch = getRegexMatch(nameToCheck, folderPath);
                         match = regexMatch.toLowerCase().startsWith(folderPath.toLowerCase());
                         break;
                     }

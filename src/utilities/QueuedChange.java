@@ -1,6 +1,8 @@
 
 package utilities;
 
+import xbmcdb.db.tools.VideoType;
+
 
 public class QueuedChange
 {
@@ -22,13 +24,18 @@ public class QueuedChange
     {
         return dropboxLocation;
     }
-    public String getTypeOfVideo()
+    public String getTypeOfVideo_depricated()
     {
         return typeOfVideo;
     }
-    public String getTypeOfMetaData()
+    
+    public VideoType getProperVideoType(){
+        return tools.getProperVideoType(typeOfVideo);
+    }    
+            
+    public MetaDataType getTypeOfMetaData()
     {
-        return typeOfMetaData;
+        return MetaDataType.valueOf(typeOfMetaData);
     }
     public String getValue()
     {

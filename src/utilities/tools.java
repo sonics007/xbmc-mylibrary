@@ -1,25 +1,21 @@
 
 package utilities;
 
-import btv.http.BTVHTTP;
+import xbmc.util.XbmcVideoLibraryFile;
+import org.json.JSONArray;
+import xbmcdb.db.tools.VideoType;
+import btv.db.Param;
+import btv.db.SingleStatementDatabase;
 import btv.logger.BTVLogLevel;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.sql.PreparedStatement;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -32,6 +28,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.jdom.Document;
 import org.jdom.input.SAXBuilder;
 import org.jdom.output.Format;
@@ -39,7 +36,10 @@ import org.jdom.output.XMLOutputter;
 import org.json.JSONException;
 import org.json.JSONStringer;
 
+import xbmc.db.XBMCVideoDbInterface;
 import static utilities.Constants.*;
+import static xbmc.db.XBMCVideoDbInterface.*;
+import static btv.tools.BTVTools.*;
 
 public class tools
 {        
@@ -122,11 +122,6 @@ public class tools
 
     }
     
-    public static boolean valid(String s)
-    {
-        return s != null && !s.trim().isEmpty();
-    }
-
     
     public static String spacesToDots(String s)
     {
@@ -134,31 +129,8 @@ public class tools
         else s = s.replaceAll(" ",".").replaceAll(",", "");
         return s;
     }
-    public static String safeFileName(String s)
-    {
-        if(!valid(s)) return "";
-        
-        String normal = "";
-        for(int i=0;i<s.length();i++)
-        {
-            char c = s.charAt(i);
-            if(c == '/') c = ' ';//replace slash with a space
-            else if(Config.ILLEGAL_FILENAME_CHARS.get((int) c) == null)
-                normal += c;
-        }
-        
-       return stripInvalidXMLChars(normal.trim());
-    }
-    public static boolean isInt(String s)
-    {
-        try
-        {
-            Integer.parseInt(s);
-            return true;
-        }
-        catch(Exception x){return false;}
+   
 
-    }
 
     //remove uncommon chars for better matching. Also, force all to lower case for case-instensitive matching
     public static String normalize(String s)
@@ -235,7 +207,7 @@ public class tools
             Logger.ERROR( "Could not get valid XML data from URL: " + url,x);
 
             //check for Yahoo API over-load
-            String stack = getStacktraceAsString(x).toLowerCase();
+            String stack = getStacktraceFromException(x).toLowerCase();
             if(stack.contains("server returned http response code: 999")
                 && stack.contains("us.music.yahooapis.com"))
             {
@@ -328,7 +300,7 @@ public class tools
     public static boolean writeToFile(File targetFile, String s, boolean append)
     {
         try
-        {
+        {            
             FileWriter writer = new FileWriter(targetFile,append);
             writer.write(s);
             writer.close();
@@ -367,7 +339,7 @@ public class tools
         {
             String sql = "SELECT dropbox_location FROM ArchivedFiles WHERE source_name = ?";
             
-            List<String> dropboxLocations= Config.archivedFilesDB.getStringList(sql, params(sourceName));
+            List<String> dropboxLocations= Config.archivedFilesDB.getStringList(sql, sourceName);
             for(String dropboxLocation : dropboxLocations)
             {                
                 if(valid(dropboxLocation))
@@ -384,7 +356,7 @@ public class tools
 
    
     
-    public static boolean addMetaDataChangeToDatabase(MyLibraryFile video, String typeOfMetaData, String newValue)
+    public static boolean addMetaDataChangeToDatabase(MyLibraryFile video, MetaDataType typeOfMetaData, String newValue)
     {
 
         String dropboxLocation = video.getFinalLocation();
@@ -392,9 +364,9 @@ public class tools
 
         //check if the change is already stored in the database
         //unique index on dropbox_location and meta_data_type
-        String checkSQL = "SELECT id FROM QueuedChanges WHERE dropbox_location = ? AND meta_data_type = ?";
+        final String checkSQL = "SELECT id FROM QueuedChanges WHERE dropbox_location = ? AND meta_data_type = ?";
                 
-        int id = Config.queuedChangesDB.getSingleInt(checkSQL, params(dropboxLocation,typeOfMetaData));
+        int id = Config.queuedChangesDB.getSingleInt(checkSQL, dropboxLocation,typeOfMetaData.toString());
         if(id == SQL_ERROR)
         {
             Logger.ERROR( "Failed to check if this video already has a meta-data-change queues for type \""+typeOfMetaData+"\": "+ dropboxLocation);
@@ -403,25 +375,26 @@ public class tools
 
         
         String sql;
-        List<Param> params;
+        Object[] params;
         
         //insert sql/params
         final String insertSQL = "INSERT INTO QueuedChanges(dropbox_location, video_type, meta_data_type, value, status) "
-                + "VALUES(?, ?, ?, ?, ?)";
-        final List<Param> insertParams = tools.params(dropboxLocation,videoType,typeOfMetaData,newValue,QUEUED);
+                + "VALUES(?, ?, ?, ?, ?)";        
+        final Object[] insertParams = array(dropboxLocation,videoType,typeOfMetaData.toString(),newValue,QUEUED);
         
         //update sql/params
         final String updateAsQueuedSQL = "UPDATE QueuedChanges SET "//do an update instead of a insert. Update video_type and value, and set status = QUEUED
                     + "video_type = ?, value = ?, status = ? WHERE id = ?";
-        final List<Param> updateParams = tools.params(videoType,newValue,QUEUED,id);
+        final Object[] updateParams = array(videoType,newValue,QUEUED,id);
         
         if(id > -1)//if it's already in the database
         {
-            String currrentVal = Config.queuedChangesDB.getSingleString("SELECT value FROM QueuedChanges WHERE id = ?",params(id));
+            //determine if the meta-data has changed
+            String currrentVal = Config.queuedChangesDB.getSingleString("SELECT value FROM QueuedChanges WHERE id = ?",id);
             boolean valueChanged = currrentVal == null || !currrentVal.equals(newValue);
             if(valueChanged)
             {
-                String status = Config.queuedChangesDB.getSingleString("SELECT status FROM QueuedChanges WHERE id = ?",params(id));
+                String status = Config.queuedChangesDB.getSingleString("SELECT status FROM QueuedChanges WHERE id = ?",id);
                 if(QUEUED.equalsIgnoreCase(status))
                 {
                     //update the queued change with the new value
@@ -431,148 +404,78 @@ public class tools
                 }
                 else if(COMPLETED.equalsIgnoreCase(status))
                 {
-                    Logger.INFO("Meta-data has changed. Will remove old meta-data and queue new meta-data for: " +dropboxLocation);
-                    //Remove the meta data change from XBMC's database, to prepare for the new one
-                    XBMCInterface xbmc = new XBMCInterface(Config.DATABASE_TYPE, (Config.DATABASE_TYPE.equals(MYSQL) ? Config.XBMC_MYSQL_VIDEO_SCHEMA : Config.sqlLiteVideoDBPath));
+                    Logger.INFO(typeOfMetaData+ " has changed. Will queue new meta-data value for: " +dropboxLocation);
+                    //Remove the meta data change from XBMC's database, to prepare for the new one                    
                     File archivedVideo = new File(dropboxLocation);
-                    String xbmcPath = XBMCInterface.getFullXBMCPath(archivedVideo.getParentFile());//the path (not including file)
+                    String xbmcPath = XBMCVideoDbInterface.getFullXBMCPath(archivedVideo);
 
-                    //check if it is in the database
-                    String fileIdSQL = "SELECT idFile "
-                        + "FROM files "
-                        + "WHERE idPath IN(SELECT idPath FROM path WHERE lower(strPath) = ?) "
-                        + "AND lower(strFileName) = ?";
-                    int file_id = xbmc.getDB().getSingleInt(fileIdSQL, params(xbmcPath.toLowerCase(), archivedVideo.getName().toLowerCase()));
-                    if(file_id < 0)
+                    XbmcVideoLibraryFile videoFile = Config.jsonRPCSender.getVideoFileDetails(xbmcPath);
+                    if(videoFile == null)
                     {
-                        if(file_id == SQL_ERROR) Logger.WARN( "Cannot update meta-data. Failed to determine idFile using: "+ fileIdSQL);
-                        else Logger.INFO( "Will not update meta-data. No file exists in XBMC's database");
-                        return true;//not an error, so return true
+                        Logger.WARN("Cannot find file in XBMC's database. Cannot update metat data for: "+ xbmcPath);
+                        return false;
                     }
-                    int video_id = xbmc.getVideoIdInLibrary(videoType, file_id);
-                    if(video_id < 0)
+                    
+                    int libraryId = videoFile.getLibraryId();
+                    VideoType typeOfVideo = getProperVideoType(videoType);
+                                       
+                    if(libraryId < 0)
                     {
-                        if(file_id == SQL_ERROR) Logger.WARN( "Cannot update meta-data. Failed to determine video id");
-                        else Logger.INFO( "Will not update meta-data. No video exists in XBMC's database with idFile = "+ file_id);
+                        
+                        Logger.INFO( "Will not update meta-data. No video exists in XBMC's library for "+getProperVideoType(videoType)+" "+ xbmcPath);
                         return true;//not really an error, so return true
                     }
                     
-                    //now remove the old meta-data                     
-                    if(MOVIE_SET.equalsIgnoreCase(typeOfMetaData))
+                    //now that we have the library id remove the old meta-data                     
+                    if(MetaDataType.MOVIE_SET ==typeOfMetaData)
                     {
-                        if(valid(currrentVal))
-                        {
-                            //remove the movie from the movie set
-                            String  removeMetadataSql = "UPDATE movie "
-                                    + "SET idSet = null "
-                                    + "WHERE idSet = (SELECT idSet FROM sets WHERE strSet = ?) "
-                                    + "AND idMovie = ?";
-                            int rowsUpdated = xbmc.getDB().executeMultipleUpdate(removeMetadataSql, params(currrentVal,video_id));
-                            if(rowsUpdated != SQL_ERROR)
-                            {
-                                //success, even if rows updated is zero, it just means that the movie no longer exists in the set. Ok for new meta-data
-                                Logger.INFO( "Successfully removed movie from old set \""+currrentVal+"\" in preperation for adding to new set named \""+newValue+"\"");
-                            }
-                            else//sql error
-                            {
-                                Logger.ERROR( "Cannot update meta-data. Failed to remove movie from old set named \""+currrentVal+"\" using "+ removeMetadataSql);
-                                return false;
-                            }
-                        }
+                        //bradvido - 11/12/2012
+                        //We don't need to remove the existing movie set value because it will be REPLACED
+                        //when it is updated using JSON-RPC
                     }
-                    else if(MOVIE_TAGS.equals(typeOfMetaData))
+                    else if(MetaDataType.MOVIE_TAGS==typeOfMetaData)
                     {
-                        if(valid(currrentVal))
-                        {
-                            //remove all the current tags in prep for new data
-                        
-                            List<String> tagsToRemove = new ArrayList<String>();
-                            if(currrentVal.contains("|"))                        
-                                tagsToRemove.addAll(Arrays.asList(currrentVal.split("\\|")));
-                            else
-                                tagsToRemove.add(currrentVal);//single tag
-
-
-                            for(String tagToRemove : tagsToRemove){
-
-                                String tagRemoveSQL = "DELETE FROM taglinks "
-                                        + "WHERE idTag = (SELECT idTag FROM tag WHERE strTag = ?) "
-                                        + "AND idMedia = ? "
-                                        + "AND media_type = ?";
-                                boolean successRemove = xbmc.getDB().executeSingleUpdate(tagRemoveSQL, tools.params(tagToRemove, video_id, "movie"));
-                                if(successRemove)                                
-                                    Logger.INFO( "Removed old movie tag \""+tagToRemove+"\" from movie: " + dropboxLocation);                                
-                                else Logger.WARN( "Failed to remove old movie tags in preperation for new ones!. Sql = "+ tagRemoveSQL);
-                            }
-                        }//end if current value is valid
+                        //bradvido - 11/12/2012
+                        //We don't need to remove the existing movie tags because they will be REPLACED
+                        //when it is updated using JSON-RPC
                     }
-                    else if(PREFIX.equalsIgnoreCase(typeOfMetaData) || SUFFIX.equalsIgnoreCase(typeOfMetaData))
+                    else if(typeOfMetaData.isXFix())//prefix or suffix
                     {
                         //remove the current suffix / prefix if it exists
                         String xFixToRemove = currrentVal;
                         if(valid(xFixToRemove))
                         {
-                            String idField, field, table;
-                            if(videoType.equals(MOVIE))
+                            String existingTitle = videoFile.getTitle();
+                            String desiredTitle = existingTitle;//init
+                            if(MetaDataType.PREFIX == typeOfMetaData)
                             {
-                                field ="c00";
-                                table = "movie";
-                                idField = "idMovie";
-                            }
-                            else if(videoType.equals(TV_SHOW))
-                            {
-                                field = "c00";
-                                table = "episode";
-                                idField = "idEpisode";
-                            }
-                            else if(videoType.equals(MUSIC_VIDEO))
-                            {
-                                field = "c00";
-                                table = "musicvideo";
-                                idField = "idMVideo";
-                            }
-                        	//AngryCamel - 20120817 1620 - Added generic
-                            else if(videoType.equals(GENERIC))
-                            {
-                                Logger.WARN("Generic video type does not update meta data");
-                                return false;
-                            }
-                            else
-                            {
-                                Logger.WARN("Unknown video type: \""+ videoType+"\", will not update meta data");
-                                return false;
-                            }
-                            String getCurrentValue = "SELECT " +field +" FROM "+ table +" WHERE "+ idField+" = ?";
-                            String dbValue = xbmc.getDB().getSingleString(getCurrentValue, params(video_id));
-                            String newDBValue = dbValue;
-                            if(PREFIX.equalsIgnoreCase(typeOfMetaData))
-                            {
-                                if(dbValue.startsWith(xFixToRemove))
+                                if(existingTitle.startsWith(xFixToRemove))
                                 {
-                                    newDBValue = dbValue.substring(xFixToRemove.length(), dbValue.length());
-                                    Logger.INFO( "Removing old prefix of \""+xFixToRemove+"\" from \""+dbValue+"\" for new value of \""+newDBValue+"\"");
+                                    desiredTitle = existingTitle.substring(xFixToRemove.length(), existingTitle.length());
+                                    Logger.INFO( "Removing old prefix of \""+xFixToRemove+"\" from \""+existingTitle+"\" for new value of \""+desiredTitle+"\"");
                                 }
                             }
-                            else if(SUFFIX.equalsIgnoreCase(typeOfMetaData))
+                            else if(MetaDataType.SUFFIX == typeOfMetaData)
                             {
-                                if(dbValue.endsWith(xFixToRemove))
+                                if(existingTitle.endsWith(xFixToRemove))
                                 {
-                                    newDBValue = dbValue.substring(0, dbValue.indexOf(xFixToRemove));
-                                    Logger.INFO( "Removing old suffix of \""+xFixToRemove+"\" from \""+dbValue+"\" for new value of \""+newDBValue+"\"");
+                                    desiredTitle = existingTitle.substring(0, existingTitle.indexOf(xFixToRemove));
+                                    Logger.INFO( "Removing old suffix of \""+xFixToRemove+"\" from \""+existingTitle+"\" for new value of \""+desiredTitle+"\"");
                                 }
-                            }
-                            if(newDBValue.equals(dbValue))//this is OK. don't return false,here, continue queueing the new change
-                                Logger.WARN( "The old suffix/prefix was not removed because it was not found. \""+xFixToRemove+"\" not found in \""+dbValue+"\"");
+                            }                            
+                            
+                            if(desiredTitle.equals(existingTitle))//this is OK. don't return false,here, continue queueing the new change
+                                Logger.INFO( "The exsiting "+typeOfMetaData+" need not be removed because it was not found. \""+xFixToRemove+"\" not found in \""+existingTitle+"\"");
                             else
                             {
                                 //do the update in XBMC
-                                String removeXFixSQL = "UPDATE " + table +" SET " + field +" = ? WHERE " + idField +" = ?";
-                                boolean updated = xbmc.getDB().executeSingleUpdate(removeXFixSQL, params(newDBValue, video_id));
-                                if(!updated) Logger.ERROR( "Failed to remove old prefix/suffix. Will not update meta-data. Sql = "+ removeXFixSQL);
+                                boolean updated = Config.jsonRPCSender.setTitle(typeOfVideo, libraryId, toAscii(desiredTitle));//ascii'ing this to avoid problem with json-rpc rejecting special characters TODO: figure out charset problems
+                                if(!updated) 
+                                    Logger.ERROR( "Failed to remove old prefix/suffix. Will not update meta-data for video: "+ xbmcPath);
                             }
                         }
-                    }
-                    xbmc.close();
+                        //else no xFix found
+                    }                    
 
                     //Update sqlite db with the new value and status of QUEUED
                     sql = updateAsQueuedSQL;
@@ -597,7 +500,7 @@ public class tools
             params = insertParams;
         }
         
-        return Config.queuedChangesDB.executeSingleUpdate(sql,params);
+        return Config.queuedChangesDB.executeSingleUpdate(sql, params);
     }    
 
     
@@ -607,8 +510,7 @@ public class tools
      */
     public static String fileNameNoExt(File f)
     {
-        String path = f.getPath();
-        
+        String path = f.getPath();        
         if(!f.getName().contains("."))
         {//no extension!
             Logger.ERROR( "This files does not have an extension: " + path);
@@ -835,50 +737,8 @@ public class tools
             return null;
         }
     }
-    public static boolean isNetworkShare(File f)
-    {
-        return isNetworkShare(f.getPath());
-    }
-    public static boolean isNetworkShare(String fullSharePath)
-    {
-        return Config.valid(fullSharePath) && fullSharePath.startsWith("\\\\");
-    }
-    public static boolean isShareAvailable(String fullSharePath)
-    {
-        if(!isNetworkShare(fullSharePath))
-        {
-            Logger.WARN( "Checking if share is available, but the file \""+fullSharePath+"\" is not a network share");
-            return new File(fullSharePath).getParentFile().exists();
-        }
-
-        int slashCount = 0;
-        for(char c : fullSharePath.toCharArray())
-            if(c == '\\') slashCount++;
-        if(slashCount >= 3)//something like \\share\folder\file.txt
-        {
-            int firstSeperator = fullSharePath.indexOf("\\", 2);
-            int secondSeperator = fullSharePath.indexOf("\\", firstSeperator+1);
-            if(secondSeperator == -1) secondSeperator = fullSharePath.length();
-            String baseShare = fullSharePath.substring(0, secondSeperator);
-            File f = new File(baseShare);
-            Logger.DEBUG( "Checking if share at \""+ baseShare +"\" is available = "+ f.exists());
-            return  f.exists();
-        }
-        else//something like \\share
-        {
-            Logger.WARN( "Cannot check if the network share is available because the path is too short: "+ fullSharePath);
-            return false;
-        }
-    }  
-    public static String getStacktraceAsString(Exception x)
-    {
-        if(x == null) return null;
-
-        StringWriter writer = new StringWriter();
-        PrintWriter printWriter = new PrintWriter(writer);
-        x.printStackTrace(printWriter);
-        return writer.toString();
-    }
+   
+    
     public static String cleanCommonWords(String s)
     {
         if(!valid(s)) return s;
@@ -927,76 +787,7 @@ public class tools
         int difference = getLevenshteinDistance(source, test);
         return difference <= fuzzyMatchMaxDifferent;
     }
-    public static int getLevenshteinDistance(String s, String t) {
-      if (s == null || t == null) {
-          throw new IllegalArgumentException("Strings must not be null");
-      }
-
-      int n = s.length(); // length of s
-      int m = t.length(); // length of t
-
-      if (n == 0) {
-          return m;
-      } else if (m == 0) {
-          return n;
-      }
-
-      if (n > m) {
-          // swap the input strings to consume less memory
-          String tmp = s;
-          s = t;
-          t = tmp;
-          n = m;
-          m = t.length();
-      }
-
-      int p[] = new int[n+1]; //'previous' cost array, horizontally
-      int d[] = new int[n+1]; // cost array, horizontally
-      int _d[]; //placeholder to assist in swapping p and d
-
-      // indexes into strings s and t
-      int i; // iterates through s
-      int j; // iterates through t
-
-      char t_j; // jth character of t
-
-      int cost; // cost
-
-      for (i = 0; i<=n; i++) {
-          p[i] = i;
-      }
-
-      for (j = 1; j<=m; j++) {
-          t_j = t.charAt(j-1);
-          d[0] = j;
-
-          for (i=1; i<=n; i++) {
-              cost = s.charAt(i-1)==t_j ? 0 : 1;
-              // minimum of cell to the left+1, to the top+1, diagonally left and up +cost
-              d[i] = Math.min(Math.min(d[i-1]+1, p[i]+1),  p[i-1]+cost);
-          }
-
-          // copy current distance counts to 'previous row' distance counts
-          _d = p;
-          p = d;
-          d = _d;
-      }
-
-      // our last action in the above loop was to switch d and p, so p now
-      // actually has the most recent cost counts
-      return p[n];
-  }
-    public static String tfl(String s, int fixedLength)
-    {
-        if(s == null) return s;
-        if(s.length() >= fixedLength) return s.substring(0,fixedLength);
-
-        //else needs padding
-        int pads = fixedLength - s.length();
-        for(int i=0;i<pads; i++)
-            s += " ";
-        return s;
-    }
+   
     public static boolean verifyIpRange(String range)
     {
         try
@@ -1039,20 +830,11 @@ public class tools
         Matcher m = p.matcher(test);
         return m.find();
     }
-    public static String getRegexMatch(String regex, String test)
-    {
-        Pattern p = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
-        Matcher m = p.matcher(test);
-        if(m.find()) return m.group();
-        else return null;
-    }
+    
+
     public static String toTwoDecimals(double d)
     {
-	DecimalFormat TWO_DECIMALS = new DecimalFormat("0.00");
-        if((d+"").equals("NaN"))
-            return "0.00";
-        else
-            return TWO_DECIMALS.format(d);
+	return toFixedDecimal(d,2);
     }           
 
      public static <T extends Document> void printXML(T t)
@@ -1074,7 +856,7 @@ public class tools
         String sql = "SELECT original_path, dropbox_location, video_type, title, series, artist, episode_number, season_number, year, is_tvdb_lookup "
                 + "FROM ArchivedFiles "
                 + "WHERE original_path = ?";
-      return Config.archivedFilesDB.getVideoWithMetaDataFromDB(sql,params(originalLocationUnescaped));
+      return Config.archivedFilesDB.getVideoWithMetaDataFromDB(sql,originalLocationUnescaped);
     }
 
     public static MyLibraryFile getVideoFromDropboxLocation(File f)
@@ -1082,7 +864,7 @@ public class tools
         String sql = "SELECT original_path, dropbox_location, video_type, title, series, artist, episode_number, season_number, year, is_tvdb_lookup "
                 + "FROM ArchivedFiles "
                 + "WHERE dropbox_location = ?";
-        return Config.archivedFilesDB.getVideoWithMetaDataFromDB(sql,params(f.getPath()));        
+        return Config.archivedFilesDB.getVideoWithMetaDataFromDB(sql,f.getPath());        
     }
            
     public static String cleanJSONLabel(String jsonString)
@@ -1094,36 +876,7 @@ public class tools
         }
         return jsonString;
     }
-    
-    
-    public static int getContentLength(String data) throws UnsupportedEncodingException{        
-        ByteArrayOutputStream sizeArray = new ByteArrayOutputStream();
-        PrintWriter sizeGetter = new PrintWriter(new OutputStreamWriter(sizeArray, "UTF-8" ));                
-        sizeGetter.write(data);
-        sizeGetter.flush();
-        sizeGetter.close();        
-        return sizeArray.size();        
-    }
-    public static String readStream(InputStream is) 
-    {
-        try
-        {
-            BufferedReader in = new BufferedReader(new InputStreamReader(is));
-            //return the raw data as a string
-            StringBuilder data = new StringBuilder();
-            while(true)
-            {
-                int i = in.read();
-                if(i == -1)break;
-                data.append( (char) i);//convert int to char
-            }    
-            return data.toString();
-        }
-        catch(IOException x){
-            Logger.ERROR("Failed to read stream: "+ x,x);
-            return null;
-        }
-    }
+               
     
     public static boolean deleteStrmAndMetaFiles(File strmFile)
     {
@@ -1168,40 +921,21 @@ public class tools
             return false;
         }
     }
+        
     
-    public static List<Param> params(Object ... params)
-    {        
-        try
-        {            
-            List<Param> paramList = new ArrayList<Param>();            
-            for(Object o : params)
-            {                
-                if(o==null)
-                    Logger.WARN( "Null parameter found. Cannot auto-determine type!");
-                //convert object to correct type
-                Param param = null;
-                                                    
-                if(o instanceof String)
-                    param = new Param(ParamType.STRING, (String) o);
-                else if(o instanceof Integer)
-                    param = new Param(ParamType.INT, (Integer) o);
-                else if(o instanceof Double)
-                    param = new Param(ParamType.DOUBLE,(Double) o);
-                else if(o instanceof java.sql.Timestamp)
-                    param = new Param(ParamType.TIMESTAMP,(java.sql.Timestamp) o);
-                else{
-                    Logger.WARN( "Unknown param: "+ o.getClass()+": "+ o);                                
-                    param =new Param(ParamType.OBJECT,o);
-                }
-                
-                paramList.add(param);            
-            }            
-            return paramList;
-        }
-        catch(Exception x)
-        {
-            Logger.ERROR( "Failed to build parameter list from: " + Arrays.toString(params),x);
-            return null;
-        }
+    public static VideoType getProperVideoType(String strType){
+        //map string to proper type
+        VideoType properType = null;
+        
+        if(Constants.TV_SHOW.equals(strType))
+            properType = VideoType.TV_SHOW;
+        else if(Constants.MOVIE.equals(strType))
+            properType = VideoType.MOVIE;
+        else if(Constants.MUSIC_VIDEO.equals(strType))
+            properType = VideoType.MUSIC_VIDEO;
+        
+        return properType;
     }
+    
+   
 }

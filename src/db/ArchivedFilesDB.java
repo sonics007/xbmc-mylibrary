@@ -3,16 +3,14 @@
  * and open the template in the editor.
  */
 package db;
+import btv.db.Param;
 import java.io.File;
 import java.sql.*;
 import java.util.List;
 import utilities.ArchivedFile;
-import utilities.Config;
-import utilities.Param;
 import utilities.Source;
 import utilities.Subfolder;
 import utilities.MyLibraryFile;
-import utilities.tools;
 import static utilities.Constants.*;
 /**
  *
@@ -75,13 +73,13 @@ public class ArchivedFilesDB extends SQLiteDB
         return archivedFile;
     }
     
-    public MyLibraryFile getVideoWithMetaDataFromDB(String preparedStmtSQL, List<Param> params)
+    public MyLibraryFile getVideoWithMetaDataFromDB(String preparedStmtSQL, Object params)
     {
         MyLibraryFile video = null;
         try
         {
             PreparedStatement stmt = getStatement(preparedStmtSQL);
-            setParams(params,stmt);
+            setParams(stmt,params);
             
             ResultSet rs = stmt.executeQuery();
 
@@ -147,7 +145,7 @@ public class ArchivedFilesDB extends SQLiteDB
         String sql = "SELECT date_archived "
                 + "FROM ArchivedFiles "
                 + "WHERE dropbox_location = ?";
-        Long dateArchived = getSingleTimestamp(sql,tools.params(archivedFile));
+        Long dateArchived = getSingleTimestamp(sql, archivedFile);
 
         if(dateArchived != null)
         {

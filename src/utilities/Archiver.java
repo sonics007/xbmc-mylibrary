@@ -25,13 +25,13 @@ public class Archiver implements Runnable
         Source src = new Source("testing","testing");
         Archiver a = new Archiver(src);
 
-        String name = "PlayOn/Netflix/Instant Queue/Alphabetical/M/MythBusters/Collection 1/02: Barrel of Bricks";
-        Config.LOGGING_LEVEL = BTVLogLevel.DEBUG;
+        String name = "SubSonic/TV Shows/Brand X with Russell Brand/Season 1/Brand X with Russell Brand - S01E08 - Episode 8 - HD TV";        
+        Logger.getOptions().setLevelToLogAt(BTVLogLevel.DEBUG);
         Logger.INFO("TESTING: "+name);
         MyLibraryFile video = new MyLibraryFile(name.replace("/", xbmc.util.Constants.DELIM));
         video.setType(TV_SHOW);
         
-        src.setCustomParser("playon");
+        //src.setCustomParser("playon");
         Subfolder subf = new Subfolder(src, "testing");//to avoid NPE's, instantite dummy objects for the lookup.
         a.subf = subf;
         video.setSubfolder(subf);
@@ -245,7 +245,7 @@ public class Archiver implements Runnable
                     {
                         if(Config.MANUAL_ARCHIVING_ENABLED)
                         {
-                            Logger.INFO( "Archiving as a special (Season zero) episode since TVDB lookup failed....");
+                            Logger.INFO( "Setting as a special (Season zero) episode since TVDB lookup failed....");
                             //save as a special
                             video.setSeasonNumber(0);
                             video.setEpisodeNumber(getNextSpecialEpisiodeNumber(video));
@@ -1002,6 +1002,27 @@ public class Archiver implements Runnable
                         video.setTitle(title);
                         video.setSeries(series);
                         return true;
+                    }
+                    else if(parts.length > 0)
+                    {
+                        /*  We already know that the SxxExx does not start at the beginning.
+                            Assume that whatever is before the SxxExx is the series and after is the title 
+                            Sample: SubSonic/TV Shows/Brand X with Russell Brand/Season 1/Brand X with Russell Brand - S01E08 - Episode 8 - HD TV                         
+                         */
+                        
+                        String lastPart = parts[0];
+                        for(int i = 1; i<parts.length;i++)//notice intentionally starting at index 1!
+                        {
+                            String part = parts[i];
+                            if(valid(part) && part.trim().equalsIgnoreCase(seasonEpisodeNaming.trim()))
+                            {
+                                video.setSeries(lastPart);//assume series comes before SxxExx
+                                if(i != parts.length-1){//if not a the end already
+                                    video.setTitle(parts[i+1]);//assume title comes after SxxExx
+                                }
+                            }
+                            lastPart = part;
+                        }
                     }
                 }
             }

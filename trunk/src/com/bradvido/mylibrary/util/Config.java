@@ -1,10 +1,10 @@
-package utilities;
+package com.bradvido.mylibrary.util;
 
-import btv.db.DbType;
-import btv.logger.BTVLogLevel;
-import db.ArchivedFilesDB;
-import db.QueuedChangesDB;
-import db.ScraperDB;
+import com.bradvido.db.*;
+import com.bradvido.util.logger.*;
+import com.bradvido.mylibrary.db.ArchivedFilesDB;
+import com.bradvido.mylibrary.db.QueuedChangesDB;
+import com.bradvido.mylibrary.db.ScraperDB;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -12,9 +12,9 @@ import org.jdom.Document;
 import org.jdom.Element;
 import org.jdom.input.SAXBuilder;
 
-import xbmcdb.db.tools.XBMCDbConfig;
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import com.bradvido.xbmc.db.XBMCDbConfig;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
 public class Config extends Constants
 {
@@ -108,7 +108,7 @@ public class Config extends Constants
         File configFile = new File(strConfigFile);
         if(!configFile.exists())
         {
-            Logger.ERROR( "Config file does not exits at: \""+strConfigFile+"\". Cannot continue.");
+            Logger.ERROR( "Config file does not exist at: \""+strConfigFile+"\". Cannot continue.");
             return false;
         }
 
@@ -917,7 +917,7 @@ public class Config extends Constants
 
     public static String escapePath(String path)
     {
-        String escaped = path.replace(xbmc.util.Constants.DELIM, "/");
+        String escaped = path.replace(com.bradvido.xbmc.util.Constants.DELIM, "/");
         return escaped;
     }
 

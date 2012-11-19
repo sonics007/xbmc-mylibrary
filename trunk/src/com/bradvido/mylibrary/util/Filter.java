@@ -1,10 +1,10 @@
-package utilities;
+package com.bradvido.mylibrary.util;
 
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static utilities.Constants.*;
+import static com.bradvido.mylibrary.util.Constants.*;
 public class Filter
 {
     public static boolean FilterMatch(String path, int runtime, Map<String, List<String>> filters)

@@ -1,5 +1,5 @@
 
-package utilities;
+package com.bradvido.mylibrary.util;
 
 public class IPChange
 {

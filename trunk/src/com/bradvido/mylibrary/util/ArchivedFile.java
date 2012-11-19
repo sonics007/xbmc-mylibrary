@@ -1,4 +1,4 @@
-package utilities;
+package com.bradvido.mylibrary.util;
 
 /**
  *

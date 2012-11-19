@@ -2,16 +2,16 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package db;
-import btv.db.Param;
+package com.bradvido.mylibrary.db;
+import com.bradvido.db.*;
 import java.io.File;
 import java.sql.*;
 import java.util.List;
-import utilities.ArchivedFile;
-import utilities.Source;
-import utilities.Subfolder;
-import utilities.MyLibraryFile;
-import static utilities.Constants.*;
+import com.bradvido.mylibrary.util.ArchivedFile;
+import com.bradvido.mylibrary.util.Source;
+import com.bradvido.mylibrary.util.Subfolder;
+import com.bradvido.mylibrary.util.MyLibraryFile;
+import static com.bradvido.mylibrary.util.Constants.*;
 /**
  *
  * @author bvidovic

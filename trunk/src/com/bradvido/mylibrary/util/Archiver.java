@@ -1,6 +1,6 @@
-package utilities;
+package com.bradvido.mylibrary.util;
 
-import btv.logger.BTVLogLevel;
+import com.bradvido.util.logger.BTVLogLevel;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -9,14 +9,16 @@ import java.util.regex.*;
 import org.apache.commons.io.FileUtils;
 
 
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
 public class Archiver implements Runnable
 {
 
     public static void main(String[] args) throws IOException
     {
+        //MAIN METHOD FOR TESTING ONLY
+        
         //\\onyx\data\compressed\StreamingVideos\TV Shows\Cops.-.s23e15\Season.23\S23E15 - Dazed & Confused #3.strm
         //PlayOn/Hulu/Popular/Popular Episodes/Cops - s23e15: Cops: Dazed & Confused #3
         //PlayOn/Netflix/Instant Queue/Alphabetical/2/24: Season 1/01: 12:00 Midnight-1:00 A.M
@@ -24,11 +26,11 @@ public class Archiver implements Runnable
         new Config().loadConfig();
         Source src = new Source("testing","testing");
         Archiver a = new Archiver(src);
-
-        String name = "SubSonic/TV Shows/Brand X with Russell Brand/Season 1/Brand X with Russell Brand - S01E08 - Episode 8 - HD TV";        
         Logger.getOptions().setLevelToLogAt(BTVLogLevel.DEBUG);
+        
+        String name = "SubSonic/TV Shows/Brand X with Russell Brand/Season 1/Brand X with Russell Brand - S01E08 - Episode 8 - HD TV";                
         Logger.INFO("TESTING: "+name);
-        MyLibraryFile video = new MyLibraryFile(name.replace("/", xbmc.util.Constants.DELIM));
+        MyLibraryFile video = new MyLibraryFile(name.replace("/", com.bradvido.xbmc.util.Constants.DELIM));
         video.setType(TV_SHOW);
         
         //src.setCustomParser("playon");
@@ -1020,6 +1022,9 @@ public class Archiver implements Runnable
                                 if(i != parts.length-1){//if not a the end already
                                     video.setTitle(parts[i+1]);//assume title comes after SxxExx
                                 }
+                                
+                                if(video.hasValidMetaData())
+                                    return true;
                             }
                             lastPart = part;
                         }
@@ -1069,7 +1074,7 @@ public class Archiver implements Runnable
         skipFolders.add(".+: Season [0-9]+");//to skip "Heroes: Season 4" this: Netflix/Instant Queue/H/Heroes/Heroes: Season 4/S04E01 - Orientation/S04E11 - Thanksgiving
         skipFolders.add("[0-9]+");//new format used by playon specified season number as single integer folder
         skipFolders.add("(Next|Previous) (Page|Section) \\(.+\\)");//HuluBlueCop/Subscriptions/The Office (HD)/Episodes (174)/Next Page (101-174 of 174)/6x12 - Secret Santa (HD)
-        String series = getParentFolderWithSkips(video.getFullPath().split(xbmc.util.Constants.DELIM),skipFolders);
+        String series = getParentFolderWithSkips(video.getFullPath().split(com.bradvido.xbmc.util.Constants.DELIM),skipFolders);
         if(valid(series))
         {
             video.setSeries(series);

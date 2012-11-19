@@ -3,7 +3,7 @@
  * and open the template in the editor.
  */
 
-package utilities;
+package com.bradvido.mylibrary.util;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -14,10 +14,10 @@ import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
-public class MyLibraryFile extends xbmc.util.XBMCFile
+public class MyLibraryFile extends com.bradvido.xbmc.util.XBMCFile
 {
     int episodeNumber=-1, seasonNumber=-1, year=-1;
     String tvdbId;

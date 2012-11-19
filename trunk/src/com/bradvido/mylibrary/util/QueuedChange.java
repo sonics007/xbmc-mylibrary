@@ -1,7 +1,7 @@
 
-package utilities;
+package com.bradvido.mylibrary.util;
 
-import xbmcdb.db.tools.VideoType;
+import com.bradvido.xbmc.util.XbmcVideoType;
 
 
 public class QueuedChange
@@ -29,7 +29,7 @@ public class QueuedChange
         return typeOfVideo;
     }
     
-    public VideoType getProperVideoType(){
+    public XbmcVideoType getProperVideoType(){
         return tools.getProperVideoType(typeOfVideo);
     }    
             

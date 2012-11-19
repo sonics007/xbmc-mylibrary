@@ -14,18 +14,15 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package utilities;
+package com.bradvido.mylibrary.util;
 
 import java.io.FileFilter;
-import btv.logger.BTVLogLevel;
-import btv.logger.BTVLogger;
-import btv.logger.BTVLoggerOptions;
-import btv.tools.BTVTools;
+import com.bradvido.util.logger.*;
+import com.bradvido.util.tools.BTVTools;
 import java.io.File;
-import org.apache.commons.io.FileUtils;
 
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 /**
  * 
  * @author Brady Vidovic
@@ -34,7 +31,7 @@ public class MyLibraryLogger extends BTVLogger{
     
     public MyLibraryLogger(Class klass, BTVLoggerOptions loggerOptions) 
     {
-        super(klass,loggerOptions,btv.tools.BTVTools.getBaseDir(klass),Constants.PROGRAM_NAME);//default base dir
+        super(klass,loggerOptions,getBaseDir(klass),Constants.PROGRAM_NAME);//default base dir
     }
     
     @Override
@@ -60,7 +57,7 @@ public class MyLibraryLogger extends BTVLogger{
         super.close(false);//default close (no reset)
         
         //For MyLibrary, delete all DEBUG historical logs because they will get too large (only keep current one)
-        try{
+        try{            
             File logDir  = new File(BASE_DIR.getAbsolutePath()+SEP+"logs");
             File[] debugLogs = logDir.listFiles(new FileFilter() {
 
@@ -69,13 +66,16 @@ public class MyLibraryLogger extends BTVLogger{
                     return f.isFile() && f.getAbsolutePath().toUpperCase().endsWith("DEBUG.LOG");
                 }
             });
-            Logger.DEBUG("Will delete "+ debugLogs.length +" debug logs found in logDir: "+ logDir);
-            for(File f : debugLogs)
+            if(debugLogs != null)
             {
-                if(!f.delete())
-                    Logger.WARN("Failed to delete DEBUG file: "+ f);
-                else 
-                    Logger.DEBUG("Deleted "+ f);
+                Logger.DEBUG("Will delete "+ debugLogs.length +" debug logs found in logDir: "+ logDir);
+                for(File f : debugLogs)
+                {
+                    if(!f.delete())
+                        Logger.WARN("Failed to delete DEBUG file: "+ f);
+                    else 
+                        Logger.DEBUG("Deleted "+ f);
+                }
             }
             
         }catch(Exception x){

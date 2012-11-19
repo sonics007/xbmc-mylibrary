@@ -1,4 +1,4 @@
-package utilities;
+package com.bradvido.mylibrary.util;
 
 import java.io.*;
 import java.net.URL;
@@ -9,8 +9,8 @@ import java.util.*;
 import org.apache.commons.io.FileUtils;
 import org.jdom.Document;
 import org.jdom.Element;
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 public class MusicVideoScraper
 {
     public static void main(String[] args)

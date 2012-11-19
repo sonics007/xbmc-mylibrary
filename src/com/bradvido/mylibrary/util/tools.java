@@ -1,12 +1,10 @@
 
-package utilities;
+package com.bradvido.mylibrary.util;
 
-import xbmc.util.XbmcVideoLibraryFile;
+import com.bradvido.util.logger.BTVLogLevel;
+import com.bradvido.xbmc.util.XbmcVideoLibraryFile;
 import org.json.JSONArray;
-import xbmcdb.db.tools.VideoType;
-import btv.db.Param;
-import btv.db.SingleStatementDatabase;
-import btv.logger.BTVLogLevel;
+import com.bradvido.xbmc.util.XbmcVideoType;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -36,10 +34,10 @@ import org.jdom.output.XMLOutputter;
 import org.json.JSONException;
 import org.json.JSONStringer;
 
-import xbmc.db.XBMCVideoDbInterface;
-import static utilities.Constants.*;
-import static xbmc.db.XBMCVideoDbInterface.*;
-import static btv.tools.BTVTools.*;
+import com.bradvido.xbmc.db.XBMCVideoDbInterface;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.xbmc.db.XBMCVideoDbInterface.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
 public class tools
 {        
@@ -108,20 +106,7 @@ public class tools
                 return StrmUpdateResult.ERROR;
             }
         }
-    }
-  
-    public static String jsonKeyValue(String key, Object value)
-    {
-        try{
-            String json = new JSONStringer().object().key(key).value(value).endObject().toString();
-            return json.substring(1, json.length()-1);//trim off the surrounding { }
-        } catch (JSONException ex) {
-            Logger.ERROR( "Cannot create JSON key value pair from key:"+key+", value:"+value,ex);
-            return "";
-        }
-
-    }
-    
+    }         
     
     public static String spacesToDots(String s)
     {
@@ -358,7 +343,7 @@ public class tools
     
     public static boolean addMetaDataChangeToDatabase(MyLibraryFile video, MetaDataType typeOfMetaData, String newValue)
     {
-
+        Config.setShortLogDesc("MetaData");
         String dropboxLocation = video.getFinalLocation();
         String videoType = video.getType();
 
@@ -398,13 +383,13 @@ public class tools
                 if(QUEUED.equalsIgnoreCase(status))
                 {
                     //update the queued change with the new value
-                    Logger.INFO( "Changing queued meta-data "+typeOfMetaData +" from \""+currrentVal+"\"  to \""+newValue+"\" for "+ videoType +" at: "+ dropboxLocation);
+                    Logger.INFO("Changing queued meta-data "+typeOfMetaData +" from \""+currrentVal+"\"  to \""+newValue+"\" for "+ videoType +" at: "+ dropboxLocation);
                     sql = updateAsQueuedSQL;//update the value
                     params = updateParams;
                 }
                 else if(COMPLETED.equalsIgnoreCase(status))
                 {
-                    Logger.INFO(typeOfMetaData+ " has changed. Will queue new meta-data value for: " +dropboxLocation);
+                    Logger.INFO(typeOfMetaData+ " has changed from \""+currrentVal+"\"  to \""+newValue+"\". Queueing meta-data change for: " +dropboxLocation);
                     //Remove the meta data change from XBMC's database, to prepare for the new one                    
                     File archivedVideo = new File(dropboxLocation);
                     String xbmcPath = XBMCVideoDbInterface.getFullXBMCPath(archivedVideo);
@@ -417,7 +402,7 @@ public class tools
                     }
                     
                     int libraryId = videoFile.getLibraryId();
-                    VideoType typeOfVideo = getProperVideoType(videoType);
+                    XbmcVideoType typeOfVideo = getProperVideoType(videoType);
                                        
                     if(libraryId < 0)
                     {
@@ -923,16 +908,16 @@ public class tools
     }
         
     
-    public static VideoType getProperVideoType(String strType){
+    public static XbmcVideoType getProperVideoType(String strType){
         //map string to proper type
-        VideoType properType = null;
+        XbmcVideoType properType = null;
         
         if(Constants.TV_SHOW.equals(strType))
-            properType = VideoType.TV_SHOW;
+            properType = XbmcVideoType.TV_SHOW;
         else if(Constants.MOVIE.equals(strType))
-            properType = VideoType.MOVIE;
+            properType = XbmcVideoType.MOVIE;
         else if(Constants.MUSIC_VIDEO.equals(strType))
-            properType = VideoType.MUSIC_VIDEO;
+            properType = XbmcVideoType.MUSIC_VIDEO;
         
         return properType;
     }

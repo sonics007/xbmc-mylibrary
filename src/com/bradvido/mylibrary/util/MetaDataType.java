@@ -14,13 +14,21 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package utilities;
+package com.bradvido.mylibrary.util;
 
 /**
  * 
  * @author Brady Vidovic
  */
-enum StrmUpdateResult {
+public enum MetaDataType {
+    MOVIE_SET, MOVIE_TAGS, PREFIX, SUFFIX;
     
-    CHANGED,SKIPPED_NO_CHANGE,ERROR
+    boolean isForMovieOnly(){
+        return this == MOVIE_SET || this == MOVIE_TAGS;
+    }
+    
+    boolean isXFix(){
+        return this == PREFIX || this == SUFFIX;
+    }
+    
 }

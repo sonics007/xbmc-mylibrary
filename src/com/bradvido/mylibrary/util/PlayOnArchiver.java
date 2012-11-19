@@ -1,12 +1,12 @@
 
 
-package utilities;
+package com.bradvido.mylibrary.util;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.regex.*;
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
 public class PlayOnArchiver
 {
@@ -296,7 +296,7 @@ public class PlayOnArchiver
                 
                 series = null;                
                 //Netflix/Instant Queue/#/30 Days/30 Days: Season 3/S03E03 - Animal Rights
-                String[] folders = video.getFullPath().split(xbmc.util.Constants.DELIM);
+                String[] folders = video.getFullPath().split(com.bradvido.xbmc.util.Constants.DELIM);
                 if(folders.length > 1)
                 {
                     String parentFolder = folders[folders.length-2];//30 Days: Season 3
@@ -316,7 +316,7 @@ public class PlayOnArchiver
                     else
                     {                    
                         //didn't work try secondary method
-                        String[] serieses = video.getFullPath().split(xbmc.util.Constants.DELIM);
+                        String[] serieses = video.getFullPath().split(com.bradvido.xbmc.util.Constants.DELIM);
                         series = serieses[serieses.length-2];//the folder above the file name
                         if(series.contains(":"))//catches folders named like so: /Busytown Mysteries: Series 2/
                             series = series.substring(0, series.indexOf(":"));

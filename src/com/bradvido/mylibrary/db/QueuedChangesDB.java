@@ -1,12 +1,12 @@
-package db;
+package com.bradvido.mylibrary.db;
 
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import utilities.Config;
-import utilities.Constants;
-import utilities.QueuedChange;
-import static utilities.Constants.*;
+import com.bradvido.mylibrary.util.Config;
+import com.bradvido.mylibrary.util.Constants;
+import com.bradvido.mylibrary.util.QueuedChange;
+import static com.bradvido.mylibrary.util.Constants.*;
 
 /**
  *

@@ -1,24 +1,33 @@
-package mylibrary;
-import xbmc.util.XbmcVideoLibraryFile;
-import xbmc.db.XBMCVideoDbInterface;
-import btv.logger.BTVLogLevel;
+package com.bradvido.mylibrary;
+import com.bradvido.xbmc.jsonrpc.XbmcListener;
+import com.bradvido.util.logger.BTVLogLevel;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Reader;
+import java.io.Writer;
+import java.net.URI;
+import com.bradvido.xbmc.util.XbmcVideoLibraryFile;
+import com.bradvido.xbmc.db.XBMCVideoDbInterface;
 import java.io.File;
 import java.net.URL;
-import utilities.*;
+import com.bradvido.mylibrary.util.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.*;
+import javax.tools.FileObject;
+import javax.tools.SimpleJavaFileObject;
 import org.apache.commons.io.FileUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import xbmc.jsonrpc.XbmcJsonRpcListener;
-import xbmc.util.XBMCFile;
-import xbmc.util.XbmcBox;
+import com.bradvido.xbmc.jsonrpc.XbmcJsonRpcListener;
+import com.bradvido.xbmc.util.XBMCFile;
+import com.bradvido.xbmc.util.XbmcBox;
 
-import xbmc.util.XbmcMovie;
-import static utilities.Constants.*;
-import static xbmc.util.Constants.*;
-import static btv.tools.BTVTools.*;
+import com.bradvido.xbmc.util.XbmcMovie;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.xbmc.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
 public class importer extends Config
 {
@@ -138,18 +147,18 @@ public class importer extends Config
             //jsonRPCSender.getVideoFileDetails("smb://localhost/dropbox$/Movies/Sexual Intelligence.strm");
             //jsonRPCSender.getMovieSets(true);
             
-            XbmcMovie mov = jsonRPCSender.getMovieDetails(7);
-            Logger.INFO(mov.getSetId()+": "+ mov.getSetName());
-            Logger.INFO("Updated movieset ? "+jsonRPCSender.setMovieSet(7, ""));
-            mov = jsonRPCSender.getMovieDetails(7);
-            Logger.INFO(mov.getSetId()+": "+ mov.getSetName());
+//            XbmcMovie mov = jsonRPCSender.getMovieDetails(7);
+//            Logger.INFO(mov.getSetId()+": "+ mov.getSetName());
+//            Logger.INFO("Updated movieset ? "+jsonRPCSender.setMovieSet(7, ""));
+//            mov = jsonRPCSender.getMovieDetails(7);
+//            Logger.INFO(mov.getSetId()+": "+ mov.getSetName());
             
             //XbmcVideoLibraryFile f = jsonRPCSender.getVideoFileDetails("smb://localhost/dropbox$/Movies/The Gymnast.strm");
             
-//            XbmcMovie mov = jsonRPCSender.getMovieDetails(7);
+//            XbmcMovie mov = jsonRPCSender.getMovieDetails(12);
 //            Logger.INFO(Arrays.toString(mov.getTags()));
-//            Logger.INFO("Updated movie ? "+jsonRPCSender.setMovieTags(7, new String[0]));// new String[]{"tag1","tag2"}));
-//            mov = jsonRPCSender.getMovieDetails(7);
+//            Logger.INFO("Updated movie ? "+jsonRPCSender.setMovieTags(12, new String[0]));// new String[]{"tag1","tag2"}));
+//            mov = jsonRPCSender.getMovieDetails(12);
 //            Logger.INFO(Arrays.toString(mov.getTags()));
             
 //            XbmcMovie mov = jsonRPCSender.getMovieDetails(7);
@@ -158,7 +167,7 @@ public class importer extends Config
 //            mov = jsonRPCSender.getMovieDetails(7);
 //            Logger.INFO(mov.getTitle());
             
-            if(true) return false;//done testing
+            return false;//done testing
         }
         
         //check if XBMC should be restarted
@@ -244,18 +253,8 @@ public class importer extends Config
         try
         {                        
             xbmcBox = new XbmcBox(new URL(XBMC_WEB_SERVER_URL), JSON_RPC_RAW_PORT);
-            XbmcJsonRpcListener jsonRpcListener = new XbmcJsonRpcListener(xbmcBox) 
+            XbmcJsonRpcListener jsonRpcListener = new XbmcListener(xbmcBox) 
             {
-
-                @Override
-                public void fileStoppedPlaying(String filePath, JSONObject jsonAnnouncement, JSONObject currentPlayer) {
-                    //not used
-                }
-
-                @Override
-                public void libraryEpisodeUpdated(int episodeId, boolean watched) {
-                    //not used
-                }
 
                 @Override
                 public void videoLibraryScanFinished() {
@@ -270,7 +269,7 @@ public class importer extends Config
                 @Override
                 public void disconnected() {
                     connectedToXbmc = false;
-                    if(isConnected())
+                    if(isConnected())//we were connected before, but have now lost connection.
                     {
                         Logger.ERROR("JSON-RPC listener has disconnected... stopping");
                         this.stop();
@@ -280,7 +279,8 @@ public class importer extends Config
                 @Override
                 public void connected() {
                     connectedToXbmc = true;
-                }
+                }                
+                
             };
             jsonRpcListener.setReconnectOnFail(false);
             
@@ -310,6 +310,7 @@ public class importer extends Config
              
              if(!valid(source.getPath()))
              {
+                 setShortLogDesc("Resolve:Source");
                  Logger.INFO("This source's path was not specified, will check list of video sources in XBMC for a matching label named \""+source.getName()+"\"");
                  try
                  {
@@ -334,7 +335,7 @@ public class importer extends Config
                  }
                  catch(Exception x)
                  {
-                     Logger.ERROR( "Failed to find source's path from XBMC's source list, will skipp the source named \""+source.getName()+"\"",x);
+                     Logger.ERROR( "Failed to resolve source's path from XBMC's source list, will skipp the source named \""+source.getName()+"\"",x);
                      continue;
                  }
                  
@@ -355,10 +356,11 @@ public class importer extends Config
                  }
              }
              
+             boolean noFilesFound = false;
              for(Subfolder subf : source.getSubfolders())
              {
                 //find the subfolder
-                String fullPathLabel  = subf.getFullName().replace("/", xbmc.util.Constants.DELIM);//TODO: allows /'s to be escaped in config.xml if they appear in the name natively
+                String fullPathLabel  = subf.getFullName().replace("/", com.bradvido.xbmc.util.Constants.DELIM);//TODO: allows /'s to be escaped in config.xml if they appear in the name natively
                 setShortLogDesc("Find:Subfolder");
                 //get the subfolder from JSON-RPC to determine what xbmc path it's name maps to
                 Logger.INFO( "Searching for subfolder: " + escapePath(fullPathLabel));
@@ -411,7 +413,8 @@ public class importer extends Config
                 if(!filesInThisSubfolder.isEmpty())
                     Logger.ERROR( "Archiver has finished but the queue was not emptied, unexpected. Some videos may not be archived!");
 
-                if(archiver.archiveSuccess == 0 && archiver.archiveSkip == 0)//no files found
+                noFilesFound = noFilesFound || (archiver.archiveSuccess == 0 && archiver.archiveSkip == 0);
+                if((archiver.archiveSuccess == 0 && archiver.archiveSkip == 0))//no files found
                 {
                     subf.getSource().setJSONRPCErrors(true);//if we didn't find any files, assume an error occurred
                     Logger.ERROR( "Since no files were successfully archived in this subfolder, assuming an error occured. "
@@ -422,8 +425,9 @@ public class importer extends Config
             }//end looping thru the subfolders of this source
              
             //clean the dropbox for this source's archived videos (as long as there weren't errors getting the videos from this source)
-            if(true || //for now, always clean, regardless of errors
-                    !source.hadJSONRPCErrors())//TODO: investigate this. hadJSONErrors was true too many times for large sources, such as PlayOn, preventing clean-ups. Maybe the clean-up thresholds in condig.xml are enough?
+            if(!noFilesFound //for now, always clean, regardless of errors
+                    //!source.hadJSONRPCErrors()//TODO: investigate this. hadJSONErrors was true too many times for large sources, such as PlayOn, preventing clean-ups. Maybe the clean-up thresholds in condig.xml are enough?
+                )
             {
                 if(connectedToXbmc)
                     cleanDropbox(source);
@@ -922,14 +926,22 @@ public class importer extends Config
         setShortLogDesc("Clean Up");
         Logger.NOTICE( "Cleaning up dropbox...");
                       
-        Collection<File> allVideoInDropbox = FileUtils.listFiles(new File(DROPBOX), new String[]{"strm"}, true);
+        File dropbox = new File(DROPBOX);
+        Collection<File> allVideoInDropbox = FileUtils.listFiles(dropbox, new String[]{"strm"}, true);
         Logger.INFO( "Checking " + allVideoInDropbox.size()+ " archived strm videos in dropbox to make sure the archived video is still valid.");
 
+        Set<File> foldersContainingAStrm = new HashSet<File>();
+        
         int deletedCount = 0;
+        File previousFolder = null;
         for(Iterator<File> it = allVideoInDropbox.iterator(); it.hasNext();)
         {
             //check if this file exists in the database, if not, delete it
-            File strmFile = it.next();                           
+            File strmFile = it.next();          
+            File currentFolder = strmFile.getParentFile();
+            //track all parent folders because the contain a strm (dont want to delete these)
+            
+            
             String path = strmFile.getPath();
             
             String getIdSQL = "SELECT id FROM ArchivedFiles WHERE lower(dropbox_location) = ?";
@@ -952,9 +964,35 @@ public class importer extends Config
                     Logger.WARN( "Failed to delete old video. Will try again next time: "+ strmFile);
                 else//successfully deleted
                     deletedCount++;                
-            }            
+            }      
+            else//valid file
+            {
+                if(!currentFolder.equals(previousFolder))//we are in a new folder. Track dirs that contain valid files.
+                    foldersContainingAStrm.addAll(getSuperDirectories(strmFile, dropbox));
+            }
+            
+            previousFolder = currentFolder;
         }
         Logger.NOTICE( "After removing "+deletedCount+" old videos from dropbox, number of videos is now: "+ (allVideoInDropbox.size()-deletedCount));
+        
+        //remove folders that no longer have any videos inside them.
+        List<File> allDirs = getSubdirectories(dropbox, true);
+        for(File dir : allDirs)
+        {
+            if(!foldersContainingAStrm.contains(dir))
+            {
+                try{
+                    if(dir.exists())//check to see if it's been deleted already
+                    {
+                        FileUtils.deleteDirectory(dir);
+                        Logger.NOTICE("Deleted old directory (contains no .strms): "+ dir);
+                    }
+                }catch(IOException x){
+                    Logger.WARN("Failed to delete old directory: "+ dir,x);
+                }
+            }            
+        }
+        
         Logger.NOTICE( "Done with dropbox clean-up");
          
         setShortLogDesc("");

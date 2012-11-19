@@ -1,9 +1,9 @@
 
-package utilities;
+package com.bradvido.mylibrary.util;
 
-import btv.logger.BTVLogLevel;
-import btv.logger.BTVLoggerOptions;
-import btv.tools.BTVConstants;
+import com.bradvido.util.logger.BTVLogLevel;
+import com.bradvido.util.logger.BTVLoggerOptions;
+import com.bradvido.util.tools.BTVConstants;
 
 
 public class Constants extends BTVConstants
@@ -49,7 +49,7 @@ public class Constants extends BTVConstants
         SQL_ERROR = -1001;        
     }
     
-    public static final String VERSION = "1.4.1"; //Version 1.4.0 and above is compatible w/ XBMC Frodo (not backwards compatible because of DB changes).
+    public static final String VERSION = "1.4.2"; //Version 1.4.0 and above is compatible w/ XBMC Frodo (not backwards compatible because of DB changes).
     public static final String XBMC_COMPATIBILITY = "Frodo";
     public static final String PROGRAM_NAME = "XBMC.MyLibrary";
     

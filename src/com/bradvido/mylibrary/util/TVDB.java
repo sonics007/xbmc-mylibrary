@@ -1,5 +1,5 @@
 
-package utilities;
+package com.bradvido.mylibrary.util;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -8,8 +8,8 @@ import java.util.List;
 import org.jdom.Document;
 import org.jdom.Element;
 
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
 public class TVDB
 {      

@@ -1,12 +1,12 @@
 
-package db;
+package com.bradvido.mylibrary.db;
 
-import btv.db.DbType;
-import btv.db.SingleStatementDatabase;
+import com.bradvido.db.DbType;
+import com.bradvido.db.SingleStatementDatabase;
 import java.sql.*;
-import utilities.Config;
+import com.bradvido.mylibrary.util.Config;
 
-import static utilities.Constants.*;
+import static com.bradvido.mylibrary.util.Constants.*;
 
 public class SQLiteDB extends SingleStatementDatabase
 {

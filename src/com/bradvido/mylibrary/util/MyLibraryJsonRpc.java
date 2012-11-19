@@ -1,23 +1,22 @@
-package utilities;
+package com.bradvido.mylibrary.util;
 
+import com.bradvido.util.logger.BTVLogLevel;
 import java.util.concurrent.*;
-import mylibrary.importer;
-import btv.logger.BTVLogLevel;
+import com.bradvido.mylibrary.importer;
 
 import java.io.File;
 import java.util.*;
 
-import xbmc.db.XBMCVideoDbInterface;
-import xbmcdb.db.tools.VideoType;
-import xbmc.jsonrpc.XbmcJsonRpc;
-import xbmc.util.*;
+import com.bradvido.xbmc.db.XBMCVideoDbInterface;
+import com.bradvido.xbmc.jsonrpc.XbmcJsonRpcSender;
+import com.bradvido.xbmc.util.*;
 
-import static xbmc.util.Constants.*;
-import static xbmc.util.XbmcTools.*;
-import static utilities.Constants.*;
-import static btv.tools.BTVTools.*;
+import static com.bradvido.xbmc.util.Constants.*;
+import static com.bradvido.xbmc.util.XbmcTools.*;
+import static com.bradvido.mylibrary.util.Constants.*;
+import static com.bradvido.util.tools.BTVTools.*;
 
-public class MyLibraryJsonRpc extends XbmcJsonRpc
+public class MyLibraryJsonRpc extends XbmcJsonRpcSender
 {
     
     public MyLibraryJsonRpc(String XBMC_SERVER_URL)
@@ -53,9 +52,29 @@ public class MyLibraryJsonRpc extends XbmcJsonRpc
         
         try
         {
-            BlockingQueue<XBMCFile> filesAndDirsFounds = new ArrayBlockingQueue<XBMCFile>(20000);
             //get all folders and files (non-recursive), then go thru them to find matches and recurse if needed
-            super.getFiles(dir, fullPathLabel, FOLDERS_AND_FILES, filesAndDirsFounds);
+            List<XBMCFile> filesAndDirsFounds = new ArrayList<XBMCFile>();            
+            
+            //allow 3 tries (sometimes plugins fail to list the first time but work if you try again)
+            List<XBMCFile> tmpFilesDirs = null; 
+            final int maxTries = 3;
+            for(int tryCount=1; tryCount <= maxTries; tryCount++)
+            {
+                tmpFilesDirs = super.getFiles(dir, fullPathLabel, FOLDERS_AND_FILES);
+                if(tmpFilesDirs != null)
+                    break;//success!
+                
+                Logger.WARN("Failed to list files (attempt "+ tryCount+" of "+ maxTries +") for dir: "+ escapePath(dir));                
+                if(tryCount == maxTries)//all done trying... failed!
+                {
+                    Logger.ERROR("Failed to list files after trying "+maxTries +" times, skipping this directory (and all sub-directories)");                    
+                    return;
+                }                                    
+                
+                try{Thread.sleep(1000*tryCount);}catch(InterruptedException ignored){}//wait a bit and try again
+            }
+            
+            filesAndDirsFounds.addAll(tmpFilesDirs);
 
             List<XBMCFile> directories = new ArrayList<XBMCFile>();
             List<XBMCFile> files = new ArrayList<XBMCFile>();
@@ -273,10 +292,10 @@ public class MyLibraryJsonRpc extends XbmcJsonRpc
                 }
                                 
                 //map the string type to the proper type
-                VideoType videoType = qc.getProperVideoType();
+                XbmcVideoType videoType = qc.getProperVideoType();
                 
                 //make sure its a known video type
-                if(videoType == null || !VideoType.isMember(videoType))
+                if(videoType == null || !XbmcVideoType.isMember(videoType))
                 {                                
                     Logger.WARN("REMOVE: Unknown video type: \""+ videoType+"\", will not update meta data");                            
                     changesToDelete.add(qc);
@@ -291,7 +310,7 @@ public class MyLibraryJsonRpc extends XbmcJsonRpc
                 
                 if (valid(Config.LINUX_SAMBA_PREFIX ))
                 {
-                    xbmcPath = utilities.Config.LINUX_SAMBA_PREFIX + xbmcPath;
+                    xbmcPath = com.bradvido.mylibrary.util.Config.LINUX_SAMBA_PREFIX + xbmcPath;
                     Logger.DEBUG( "Using LINUX_SAMBA_PREFIX. Concatentated path: "+ xbmcPath);
                 }
 
@@ -367,27 +386,32 @@ public class MyLibraryJsonRpc extends XbmcJsonRpc
                         
                         //determine existing tags
                         String[] existingTags = movie.getTags();
-                        if(existingTags != null)
-                            Arrays.sort(existingTags);
+                        if(existingTags == null)
+                            existingTags = new String[0];
+                        
+                        Arrays.sort(existingTags);
                         Logger.DEBUG("Existing Tags = "+ Arrays.toString(existingTags));
                         
-                        final String splitter = "|";  
-                        String[] desiredTags = strDesiredTags.contains(splitter) ? splitLiteralDelim(strDesiredTags, splitter)
-                                                                            : new String[]{strDesiredTags};                                                                                                                          
-                                                
-                        
-                        if(desiredTags == null)
+                        String[] desiredTags;
+                        if(!valid(strDesiredTags))
                         {
-                            Logger.WARN("Found no value for desired tags, will set to none.");
+                            Logger.DEBUG("Found no value for desired tags, will set to none.");
                             desiredTags = new String[0];
                         }                        
+                        else
+                        {
+                            final String splitter = "|";  
+                            desiredTags = strDesiredTags.contains(splitter) ? splitLiteralDelim(strDesiredTags, splitter)
+                                                                            : new String[]{strDesiredTags};                                                                                                                          
+                        }
+                                                
                         Arrays.sort(desiredTags);//get alphabetical order so we can compare and ignore order                        
                         Logger.DEBUG("Desired Tags = "+ Arrays.toString(desiredTags));                        
                         
                         boolean tagsHaveChanged = 
                             existingTags == null  ? true
                                                   : !Arrays.equals(existingTags, desiredTags);
-                         
+                                                 
                         if(!tagsHaveChanged){
                             Logger.INFO("OK: Tags have not changed. Existing = "+ Arrays.toString(existingTags)+", Desired = "+ Arrays.toString(desiredTags));
                             changesCompleted.add(qc);

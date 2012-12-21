@@ -29,11 +29,15 @@ public class Archiver implements Runnable
         Logger.getOptions().setLevelToLogAt(BTVLogLevel.DEBUG);
         
         String name = "SubSonic/TV Shows/Brand X with Russell Brand/Season 1/Brand X with Russell Brand - S01E08 - Episode 8 - HD TV";                
+        //name = "SubSonic/TV/Alcatraz/Season 01/Alcatraz.S01E01.Pilot";
+        //name = "PlayOn/Netflix/Instant Queue/Alphabetical/2/324: Season 1/01: 12:00 Midnight-1:00 A.M";
+        //src.setCustomParser("playon");
+        
         Logger.INFO("TESTING: "+name);
         MyLibraryFile video = new MyLibraryFile(name.replace("/", com.bradvido.xbmc.util.Constants.DELIM));
         video.setType(TV_SHOW);
         
-        //src.setCustomParser("playon");
+        
         Subfolder subf = new Subfolder(src, "testing");//to avoid NPE's, instantite dummy objects for the lookup.
         a.subf = subf;
         video.setSubfolder(subf);
@@ -950,7 +954,7 @@ public class Archiver implements Runnable
 
 
         //now get series/title
-        String[] titleSplitters = new String[]{" - ", ": ", ":", "-", " : ", " -- "};
+        String[] titleSplitters = new String[]{" - ", ": ", ":", "-", " : ", " -- ","."};
         int seasonEpisodeIndex = video.getFileLabel().indexOf(seasonEpisodeNaming);        
         if(seasonEpisodeIndex == 0)//SxxExx must be at beginning of file for this method
         {
@@ -986,7 +990,7 @@ public class Archiver implements Runnable
                 if(video.getFileLabel().contains(splitter))
                 {
                     
-                    String[] parts = video.getFileLabel().split(splitter);
+                    String[] parts = splitLiteralDelim(video.getFileLabel(),splitter);
                     Logger.DEBUG( "Splitting \""+video.getFileLabel()+"\" with \""+splitter+"\" = "+ Arrays.toString(parts)+", length of "+ parts.length +", looking for "+ 3);
                     if(parts.length == 3)
                     {
@@ -1033,6 +1037,7 @@ public class Archiver implements Runnable
             }
 
         }
+        Logger.WARN("Default parse failed using these splitters: "+ Arrays.toString(titleSplitters));
         return false;
     }
 
